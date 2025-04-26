@@ -42,38 +42,5 @@ const workflow = new StateGraph<AppState>({
     .addEdge(ECHO_AGENT, END)
 ;
 
-// Add the nodes
-// workflow.addNode(SUPERVISOR, supervisorNode);
-// workflow.addNode(ECHO_AGENT, echoAgentNode);
-
-// Define the edges
-
-// Entry point is the supervisor
-// workflow.setEntryPoint(SUPERVISOR);
-// workflow.setEntryPoint(START);
-// workflow.addEdge(START, "supervisor");
-
-// The supervisor decides the next step.
-// workflow.addConditionalEdges(
-//     SUPERVISOR,
-//     async (state: AppState) => {
-//         const { nextNode } = await supervisorNode(state);
-//         // Ensure the returned value is one of the expected keys
-//         if (nextNode === ECHO_AGENT) {
-//             return ECHO_AGENT;
-//         }
-//         // Add checks for other valid nodes or END
-//         return END;
-//     },
-//     {
-//         // Explicitly map the possible return values from the conditional function
-//         [ECHO_AGENT as string]: ECHO_AGENT,
-//         [END as string]: END,
-//     } as Record<string, string> // Cast the entire mapping object
-// );
-
-// The echoAgent finishes the current flow
-// workflow.addEdge(ECHO_AGENT, END);
-
 // Compile the graph into a runnable app
 export const app = workflow.compile(); 
