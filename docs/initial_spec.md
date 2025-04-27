@@ -28,7 +28,7 @@ Later evolutions of the system may have different interfaces, e.g. web-based, so
 
 
 ## General
-1. The system view will be managed using @memory mcp tools, loaded potentially from a file.
+1. The agents will use the memory mechanism (MemoryService) to store the overall system view, and pass it as state between the agents.
 2. Inputs will be file-based (relative or absolute paths) for text/markdown/log files.
 3. The agent architecture will involve multiple agents (Analysis, Documenter, Planning, Info Gathering, etc.) orchestrated by a supervisor in a simple flow.
 4. LLM configuration will be flexible (multiple models supported) via environment variables or CLI arguments.
