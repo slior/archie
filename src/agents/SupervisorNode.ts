@@ -1,5 +1,6 @@
 import { AppState } from "./graph"; // Use the actual AppState
 import { END } from "@langchain/langgraph"; // Import END
+import { say,dbg } from "../cli/shell";
 
 // Define node names as constants locally or import them if defined centrally
 const ANALYSIS_AGENT = "analysisAgent";
@@ -10,12 +11,15 @@ const ECHO_AGENT = "echoAgent";
  */
 export async function supervisorNode(state: AppState): Promise<{ nextNode: string }> {
     console.log("--- Supervisor Node Running ---");
+    
+    
     const userInput = state.userInput.toLowerCase();
-
+    dbg(`userInput: ${userInput}`);
     // Define keywords for routing
     // TODO: Define more robust keywords or a command structure
     const analysisKeywords = ["analyze", "analysis", "review requirement", "start analysis"];
     const triggerAnalysis = analysisKeywords.some(keyword => userInput.includes(keyword));
+    dbg(`triggerAnalysis: ${triggerAnalysis}`);
 
     if (triggerAnalysis) {
         console.log("Supervisor: Routing to Analysis Agent");

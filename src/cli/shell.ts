@@ -80,7 +80,7 @@ async function handleAnalyzeCommand(args: string[]) {
     // Thread ID & Initial State
     const thread_id = uuidv4();
     const initialAppState: Partial<AppState> = {
-        userInput: query,
+        userInput: `analyze: ${query}`,
         fileContents: fileContents,
         analysisHistory: [],
         analysisOutput: "",
@@ -93,6 +93,7 @@ async function handleAnalyzeCommand(args: string[]) {
 
     // Execution Loop
     let currentInput: Partial<AppState> | Command = initialAppState;
+    let iteration = 0;
     while (true) {
         let interrupted = false;
         let agentQuery = "";
@@ -103,10 +104,12 @@ async function handleAnalyzeCommand(args: string[]) {
 
             for await (const chunk of stream) {
                 // console.dir(chunk, { depth: 1 }); // Debug logging
+                dbg(`iteration: ${iteration}, chunk: ${JSON.stringify(chunk)}`);
                 if (chunk.__interrupt__) {
                     interrupted = true;
                     // Extract query from the first interrupt object's value
                     agentQuery = chunk.__interrupt__[0]?.value?.query || "Agent needs input.";
+                    dbg(`agentQuery: ${agentQuery}`);
                     break; // Exit inner loop to prompt user
                 }
                  // You might want to log other node outputs here if needed
@@ -123,14 +126,31 @@ async function handleAnalyzeCommand(args: string[]) {
             const { userResponse } = await inquirer.prompt([
                 { type: 'input', name: 'userResponse', message: 'Your response: ' }
             ]);
-            // Prepare Command for next iteration
-            currentInput = new Command({ resume: userResponse });
+
+            // Revert to using Command({ resume: ... }) only
+            currentInput = new Command({ 
+                resume: userResponse 
+                // goto: "analysisPrepare" // Remove invalid goto
+            });
+            
+            // Restore optional debug logging if needed
+            // --- State Before Resume --- (Optional: can be re-enabled for debugging)
+            // try {
+            //     const stateBeforeResume = await agentApp.getState(config);
+            //     console.log("--- State Before Resume ---");
+            //     console.dir(stateBeforeResume.values, { depth: null });
+            //     console.log("--------------------------");
+            // } catch (e) { console.error("Error getting state before resume:", e); }
+            // --- End State Before Resume ---
+            dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
+
         } else {
             // Graph finished without interruption
             console.log("\n--- Analysis Complete ---");
             break; // Exit the while loop
         }
-    }
+        iteration++;
+    }   
 
     // Final Output
     try {
@@ -183,3 +203,12 @@ export async function startShell(memoryService: MemoryService) {
     }
   }
 } 
+
+
+export function dbg(s: string) {
+    console.debug(s);
+}
+
+export function say(s : string) {
+    console.log(s);
+}
