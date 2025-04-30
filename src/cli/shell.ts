@@ -36,35 +36,7 @@ async function handleDefaultCommand(commandInput: string) {
     }
 }
 
-// --- Helper Function: Analyze Command Handler ---
-async function handleAnalyzeCommand(args: string[]) {
-    let query = "";
-    const files: string[] = [];
-
-    // Basic argument parsing
-    try {
-        for (let i = 0; i < args.length; i++) {
-            if (args[i] === '--query' && i + 1 < args.length) {
-                query = args[i + 1];
-                i++;
-            } else if (args[i] === '--file' && i + 1 < args.length) {
-                files.push(args[i + 1]);
-                i++;
-            } else {
-                console.warn(`Unrecognized argument: ${args[i]}`);
-            }
-        }
-        if (!query || files.length === 0) {
-            console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-            return; // Exit handler
-        }
-    } catch (e) {
-        console.log("Error parsing arguments for analyze command.");
-        console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-        return;
-    }
-
-    // File Reading
+async function readFiles(files: string[]): Promise<Record<string, string>> {
     const fileContents: Record<string, string> = {};
     try {
         for (const filePath of files) {
@@ -74,9 +46,47 @@ async function handleAnalyzeCommand(args: string[]) {
         }
     } catch (error) {
         console.error(`Error reading input files: ${error}`);
-        return;
+     
     }
+    finally {
+        return fileContents;
+    }
+}
 
+function parseArgs(args: string[]): { query: string, files: string[] }
+{
+    let q = '';
+    let files: string[] = [];
+    try {
+        for (let i = 0; i < args.length; i++) {
+            if (args[i] === '--query' && i + 1 < args.length) {
+                q = args[i + 1];
+                i++;
+            } else if (args[i] === '--file' && i + 1 < args.length) {
+                files.push(args[i + 1]);
+                i++;
+            } else {
+                console.warn(`Unrecognized argument: ${args[i]}`);
+            }
+        }
+        if (!q || files.length === 0) {
+            console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
+            return { query: '', files: [] }; // Exit handler
+        }
+    } catch (e) {
+        console.log("Error parsing arguments for analyze command.");
+        console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
+        return { query: '', files: [] };
+    }
+    return { query: q, files: files };
+}
+
+// --- Helper Function: Analyze Command Handler ---
+async function handleAnalyzeCommand(args: string[]) {
+
+    const { query, files } = parseArgs(args);
+    
+    const fileContents = await readFiles(files);
     // Thread ID & Initial State
     const thread_id = uuidv4();
     const initialAppState: Partial<AppState> = {
@@ -133,15 +143,6 @@ async function handleAnalyzeCommand(args: string[]) {
                 // goto: "analysisPrepare" // Remove invalid goto
             });
             
-            // Restore optional debug logging if needed
-            // --- State Before Resume --- (Optional: can be re-enabled for debugging)
-            // try {
-            //     const stateBeforeResume = await agentApp.getState(config);
-            //     console.log("--- State Before Resume ---");
-            //     console.dir(stateBeforeResume.values, { depth: null });
-            //     console.log("--------------------------");
-            // } catch (e) { console.error("Error getting state before resume:", e); }
-            // --- End State Before Resume ---
             dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
 
         } else {
