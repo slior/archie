@@ -101,3 +101,27 @@ sequenceDiagram
     *   Once the `startShell` function returns (which only happens after the loop is broken by the `exit` command), the `main` function logs "Shell exited. Application shutting down."
     *   The `main` function completes execution. If it finishes successfully, the Node.js process exits cleanly. Error handling is present to catch issues during `main`.
     *   Relevant Code: [`main.ts L36`](../src/main.ts#L36), [`main.ts L39-L42`](../src/main.ts#L39-L42) 
+
+## Agent Graph Structure
+
+The following diagram illustrates the nodes and edges of the compiled agent graph (`src/agents/graph.ts`) responsible for handling user commands beyond basic shell operations like `exit`.
+
+```mermaid
+graph TD
+    START([Start]) --> supervisor;
+    supervisor -- "analyze" keyword --> analysisPrepare;
+    supervisor -- "echo" keyword --> echoAgent;
+    supervisor -- other --> END([End]);
+    analysisPrepare -- has analysisOutput --> END;
+    analysisPrepare -- no analysisOutput --> analysisInterrupt;
+    analysisInterrupt --> analysisPrepare; 
+    echoAgent --> END;
+```
+
+**Node Descriptions:**
+
+*   **`supervisor`**: Determines the initial routing based on user input keywords.
+*   **`echoAgent`**: Simple agent that echoes input (for testing).
+*   **`analysisPrepare`**: Handles the core logic of the analysis agent, including LLM calls, state preparation, and checking for completion.
+*   **`analysisInterrupt`**: Triggers the pause (`interrupt`) to wait for user input during the analysis conversation.
+*   **`START` / `END`**: Special nodes representing the graph entry and exit points. 
