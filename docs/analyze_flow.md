@@ -21,8 +21,9 @@ sequenceDiagram
     Shell->>Shell: Parse args & read files
     Shell->>Shell: Create initial AppState & config (thread_id)
     Shell->>AgentGraph: app.stream(initialState, config)
-    AgentGraph->>AgentGraph: START -> Supervisor
-    AgentGraph->>AgentGraph: Supervisor decides -> AnalysisPrepareNode
+    AgentGraph->>AgentGraph: START -> Evaluate Initial Routing
+    Note right of AgentGraph: Based on userInput keywords
+    AgentGraph->>AgentGraph: Route -> AnalysisPrepareNode
     AgentGraph->>AgentGraph: Run AnalysisPrepareNode (LLM call, prepare query)
     Note right of AgentGraph: Returns state update (history, query)
     AgentGraph->>Checkpointer: Save State (after Prepare returns)
@@ -94,10 +95,11 @@ sequenceDiagram
     *   The execution loop begins by calling `agentApp.stream(initialAppState, config)`.
     *   Execution enters the LangGraph graph at the `START` node, which immediately transitions to the `SUPERVISOR` node.
 
-4.  **Supervisor Routing (`src/agents/SupervisorNode.ts` & `graph.ts` conditional edge):**
-    *   `supervisorNode` runs, examining `state.userInput`.
-    *   It detects the "analyze" keyword and decides the next node should be `analysisPrepare`.
-    *   The synchronous conditional edge logic in `graph.ts` receives this decision and confirms the route to the `ANALYSIS_PREPARE` node.
+4.  **Initial Routing (`src/agents/graph.ts` conditional edge from START):**
+    *   The conditional edge logic originating from the `START` node is executed.
+    *   It examines `state.userInput`.
+    *   Based on keywords (e.g., "analyze"), it determines the first node to execute (e.g., `analysisPrepare`).
+    *   (This replaces the logic previously handled by a separate `supervisorNode`).
 
 5.  **Analysis Preparation (`src/agents/AnalysisPrepareNode.ts`):**
     *   `analysisPrepareNode` executes.

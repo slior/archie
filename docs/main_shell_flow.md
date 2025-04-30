@@ -108,10 +108,9 @@ The following diagram illustrates the nodes and edges of the compiled agent grap
 
 ```mermaid
 graph TD
-    START([Start]) --> supervisor;
-    supervisor -- "analyze" keyword --> analysisPrepare;
-    supervisor -- "echo" keyword --> echoAgent;
-    supervisor -- other --> END([End]);
+    START([Start]) -- "analyze" keyword --> analysisPrepare;
+    START -- "echo" keyword --> echoAgent;
+    START -- other --> END([End]);
     analysisPrepare -- has analysisOutput --> END;
     analysisPrepare -- no analysisOutput --> analysisInterrupt;
     analysisInterrupt --> analysisPrepare; 
@@ -120,8 +119,7 @@ graph TD
 
 **Node Descriptions:**
 
-*   **`supervisor`**: Determines the initial routing based on user input keywords.
 *   **`echoAgent`**: Simple agent that echoes input (for testing).
 *   **`analysisPrepare`**: Handles the core logic of the analysis agent, including LLM calls, state preparation, and checking for completion.
 *   **`analysisInterrupt`**: Triggers the pause (`interrupt`) to wait for user input during the analysis conversation.
-*   **`START` / `END`**: Special nodes representing the graph entry and exit points. 
+*   **`START` / `END`**: Special nodes representing the graph entry and exit points. The initial routing decision happens in the conditional edge logic originating from `START`. 
