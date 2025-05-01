@@ -2,31 +2,47 @@ import inquirer from 'inquirer';
 import { MemoryService } from '../memory/MemoryService';
 import { app as agentApp, AppState } from '../agents/graph';
 import { handleAnalyzeCommand } from './AnalyzeCommand';
-// Imports needed for Analysis Agent command
-// import * as fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { Command } from '@langchain/langgraph';
-// import * as path from 'path'; // Import path for resolving file paths
 
 const EXIT_COMMAND = 'exit';
 const ANALYZE_COMMAND = 'analyze';
 
 export type Input = Partial<AppState> | Command;
 
+/**
+ * Creates a new configuration object for the agent graph with a unique thread ID.
+ * 
+ * This function generates a new UUID v4 thread ID and returns it wrapped in a 
+ * configuration object structure expected by the LangGraph framework. The thread ID
+ * is used to maintain conversation state and history across multiple graph executions.
+ * 
+ * @returns {Object} Configuration object with format { configurable: { thread_id: string } }
+ */
 export function newGraphConfig()
 {
     const thread_id = uuidv4(); 
     return { configurable: { thread_id } };
 }
 
-// --- Helper Function: Default Command Handler ---
+
+/**
+ * Handles commands that don't match any special keywords by passing them directly to the agent graph.
+ * 
+ * This function creates an initial state with the command as user input and empty fields for other
+ * state properties, then invokes the agent graph for a single-turn response.
+ * it makes one call and returns the response.
+ * 
+ * @param commandInput - The raw command string entered by the user
+ * @throws Error if the agent graph fails to execute or is not available
+ */
 async function handleDefaultCommand(commandInput: string) {
     if (!agentApp) {
-        console.log("Error: Agent graph is not compiled or available.");
+        dbg("Error: Agent graph is not compiled or available.");
         return;
     }
     try {
-        console.log(`Invoking agent graph with input: "${commandInput}"`);
+        dbg(`Invoking agent graph with input: "${commandInput}"`);
         // Define the initial state for this invocation, including defaults for new fields
         const initialState: Input = {
             userInput: commandInput,
@@ -41,147 +57,10 @@ async function handleDefaultCommand(commandInput: string) {
         const result = await agentApp.invoke(initialState, config);
         say(`Agent Response: ${result.response}`); // Display the final response from the graph state
     } catch (error) {
-        console.error("Error during default graph execution:", error);
+        dbg(`Error during default graph execution: ${error}`);
         throw error;
     }
 }
-
-// async function readFiles(files: string[]): Promise<Record<string, string>> {
-//     const fileContents: Record<string, string> = {};
-//     try {
-//         for (const filePath of files) {
-//             const resolvedPath = path.resolve(filePath);
-//             console.log(`Reading file: ${resolvedPath}`);
-//             fileContents[resolvedPath] = await fs.readFile(resolvedPath, 'utf-8');
-//         }
-//     } catch (error) {
-//         console.error(`Error reading input files: ${error}`);
-     
-//     }
-//     finally {
-//         return fileContents;
-//     }
-// }
-
-// function parseArgs(args: string[]): { query: string, files: string[] }
-// {
-//     let q = '';
-//     let files: string[] = [];
-//     try {
-//         for (let i = 0; i < args.length; i++) {
-//             if (args[i] === '--query' && i + 1 < args.length) {
-//                 q = args[i + 1];
-//                 i++;
-//             } else if (args[i] === '--file' && i + 1 < args.length) {
-//                 files.push(args[i + 1]);
-//                 i++;
-//             } else {
-//                 console.warn(`Unrecognized argument: ${args[i]}`);
-//             }
-//         }
-//         if (!q || files.length === 0) {
-//             console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-//             return { query: '', files: [] }; // Exit handler
-//         }
-//     } catch (e) {
-//         console.log("Error parsing arguments for analyze command.");
-//         console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-//         return { query: '', files: [] };
-//     }
-//     return { query: q, files: files };
-// }
-
-// type Input = Partial<AppState> | Command;
-
-// async function runGraph(currentInput: Input, config: any) : Promise<{interrupted: boolean, agentQuery: string}>
-// {
-//     let stream;
-//     let agentQuery = "";
-//     let interrupted = false;
-//     try {
-//         stream = await agentApp.stream(currentInput, config);
-
-//         for await (const chunk of stream) {
-//             dbg(`chunk: ${JSON.stringify(chunk)}`);
-//             if (chunk.__interrupt__) {
-//                 interrupted = true;
-//                 // Extract query from the first interrupt object's value
-//                 agentQuery = chunk.__interrupt__[0]?.value?.query || "Agent needs input.";
-//                 dbg(`agentQuery: ${agentQuery}`);
-//                 break; // Exit inner loop to prompt user
-//             }
-//              // You might want to log other node outputs here if needed
-//              // e.g., if (chunk.supervisor) { console.log("Supervisor output:", chunk.supervisor); }
-//         }
-//     } catch (error) {
-//         console.error("Error during agent graph stream:", error);
-//         throw error; // Exit the handler on stream error
-//     }
-//     return {interrupted, agentQuery};
-// }
-
-// --- Helper Function: Analyze Command Handler ---
-// async function handleAnalyzeCommand(args: string[]) {
-
-//     const { query, files } = parseArgs(args);
-    
-//     const fileContents = await readFiles(files);
-
-//     const initialAppState: Partial<AppState> = {
-//         userInput: `analyze: ${query}`,
-//         fileContents: fileContents,
-//         analysisHistory: [],
-//         analysisOutput: "",
-//         currentAnalysisQuery: "",
-//         response: "", 
-//     };
-//     const config = newGraphConfig();
-
-//     dbg(`Starting analysis with thread ID: ${config.configurable.thread_id}`);
-
-//     /*
-//         The core of this function is a loop that runs the agent graph,
-//         and handles the agent's interrupt requests.
-//      */
-//     let currentInput: Input = initialAppState;
-//     let analysisDone = false;
-//     while (!analysisDone)
-//     {
-
-//         const {interrupted, agentQuery} = await runGraph(currentInput, config);
-
-//         if (interrupted)
-//         {
-//             analysisDone = false;
-//             say(`\nAgent: ${agentQuery}`);
-//             const { userResponse } = await inquirer.prompt([
-//                 { type: 'input', name: 'userResponse', message: 'Your response: ' }
-//             ]);
-
-//             currentInput = new Command({  resume: userResponse  });
-//             dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
-
-//         }
-//         else
-//         {
-//             say("\n--- Analysis Complete ---");
-//             analysisDone = true;
-//         }
-//     }   
-
-//     // Final Output
-//     try
-//     {
-//         const finalState = await agentApp.getState(config);
-//         say("Final Output:");
-//         say(finalState.values.analysisOutput || "No analysis output generated.");
-//     }
-//     catch (error)
-//     {
-//         console.error("Error retrieving final graph state:", error);
-//         throw error;
-//     }
-// }
 
 /**
  * Prompts the user for command input in the interactive shell.

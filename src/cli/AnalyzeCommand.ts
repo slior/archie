@@ -7,6 +7,25 @@ import * as path from 'path';
 import inquirer from 'inquirer';
 
 
+/**
+ * Handles the 'analyze' command by initiating an interactive analysis session with the agent.
+ * 
+ * This function:
+ * 1. Parses the command arguments to extract the query and file paths
+ * 2. Reads the contents of the specified files
+ * 3. Initializes the analysis state and configuration
+ * 4. Enters an interactive loop where it:
+ *    - Runs the agent graph
+ *    - Handles interrupts from the agent to get user input
+ *    - Continues until analysis is complete
+ * 5. Outputs the final analysis results
+ *
+ * The function implements a Human-in-the-Loop pattern where the agent can pause
+ * execution to ask clarifying questions before providing the final analysis.
+ * 
+ * @param args - Array of command line arguments containing --query and --file parameters
+ * @throws Error if there are issues accessing the graph state or other runtime errors
+ */
 export async function handleAnalyzeCommand(args: string[]) {
 
     const { query, files } = parseArgs(args);
@@ -33,26 +52,9 @@ export async function handleAnalyzeCommand(args: string[]) {
     let analysisDone = false;
     while (!analysisDone)
     {
-
-        const {interrupted, agentQuery} = await runGraph(currentInput, config);
-
-        if (interrupted)
-        {
-            analysisDone = false;
-            say(`\nAgent: ${agentQuery}`);
-            const { userResponse } = await inquirer.prompt([
-                { type: 'input', name: 'userResponse', message: 'Your response: ' }
-            ]);
-
-            currentInput = new Command({  resume: userResponse  });
-            dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
-
-        }
-        else
-        {
-            say("\n--- Analysis Complete ---");
-            analysisDone = true;
-        }
+        const { isDone, newInput } = await analysisIteration(currentInput, config);
+        currentInput = newInput;
+        analysisDone = isDone;
     }   
 
     // Final Output
@@ -69,6 +71,28 @@ export async function handleAnalyzeCommand(args: string[]) {
     }
 }
 
+async function analysisIteration(currentInput: Input, config: any) : Promise<{ isDone: boolean, newInput: Input }>
+{
+    const {interrupted, agentQuery} = await runGraph(currentInput, config);
+    let analysisDone = false;
+    if (interrupted)
+    {
+        say(`\nAgent: ${agentQuery}`);
+        const { userResponse } = await inquirer.prompt([
+            { type: 'input', name: 'userResponse', message: 'Your response: ' }
+        ]);
+
+        currentInput = new Command({  resume: userResponse  });
+        dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
+
+    }
+    else
+    {
+        say("\n--- Analysis Complete ---");
+        analysisDone = true;
+    }
+    return { isDone: analysisDone, newInput: currentInput };
+}
 
 async function readFiles(files: string[]): Promise<Record<string, string>> {
     const fileContents: Record<string, string> = {};
