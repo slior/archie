@@ -2,7 +2,7 @@ import inquirer from 'inquirer';
 import { MemoryService } from '../memory/MemoryService';
 import { app as agentApp, AppState } from '../agents/graph';
 import { handleAnalyzeCommand } from './AnalyzeCommand';
-import { v4 as uuidv4 } from 'uuid';
+import * as uuid from 'uuid';
 import { Command } from '@langchain/langgraph';
 
 const EXIT_COMMAND = 'exit';
@@ -21,7 +21,7 @@ export type Input = Partial<AppState> | Command;
  */
 export function newGraphConfig()
 {
-    const thread_id = uuidv4(); 
+    const thread_id = uuid.v4();
     return { configurable: { thread_id } };
 }
 
@@ -70,7 +70,7 @@ async function handleDefaultCommand(commandInput: string) {
  * 
  * @returns Promise that resolves to the trimmed command string entered by user
  */
-async function getCommandInput() : Promise<string>
+export async function getCommandInput() : Promise<string>
 {
     const answers = await inquirer.prompt([
         { type: 'input', name: 'command', message: 'archie> ' }
@@ -91,9 +91,9 @@ async function getCommandInput() : Promise<string>
  *   - command: The first word of input, converted to lowercase
  *   - args: Array of remaining arguments, with quotes stripped from quoted arguments
  */
-function parseCommand(commandInput: string) : {command: string, args: string[]}
+export function parseCommand(commandInput: string) : {command: string, args: string[]}
 {
-    const parts = commandInput.match(/(?:[^\s\"]+|\"[^\"]*\")+/g) || [];
+    const parts = commandInput.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
     const command = parts[0]?.toLowerCase() || '';
     const args = parts.slice(1).map((arg: string) => 
         (arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'")) 

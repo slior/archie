@@ -7,7 +7,7 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "mocha --require ts-node/register tests/**/*.test.ts",
     "build": "tsc",
     "start": "ts-node src/main.ts",
     "docs:graph": "ts-node ./scripts/update-graph-docs.ts"
@@ -16,13 +16,20 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/chai": "^4.3.20",
+    "@types/inquirer": "^9.0.7",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.15.2",
+    "@types/sinon": "^17.0.4",
+    "@types/uuid": "^10.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^11.2.2",
+    "sinon": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@langchain/langgraph": "^0.2.67",
-    "@types/uuid": "^10.0.0",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",
     "inquirer": "^12.6.0",
