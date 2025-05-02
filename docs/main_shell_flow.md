@@ -45,7 +45,7 @@ sequenceDiagram
         Main->>Terminal: Process ends
     else command == "analyze"
         Shell->>AnalyzeCmd: handleAnalyzeCommand(args)
-        Note over AnalyzeCmd, AgentGraph: Executes analysis flow (see analyze_flow.md)
+        Note over AnalyzeCmd, AgentGraph: Executes analysis flow (using --inputs, see analyze_flow.md)
         AnalyzeCmd-->>Shell: Returns control
         Shell->>Shell: getCommandInput() waits... // Loop continues
     else // Default command
@@ -95,7 +95,7 @@ sequenceDiagram
     *   `parseCommand(commandInput)` is called to split the raw string into a lowercase `command` and an array of `args` (handling quoted arguments).
     *   A `switch` statement directs execution based on the `command`:
         *   **`exit`:** Saves memory via `memoryService.saveMemory()`, logs messages, and breaks the loop, causing `startShell` to return.
-        *   **`analyze`:** Calls `handleAnalyzeCommand(args)` from `src/cli/AnalyzeCommand.ts`, delegating the entire analysis workflow (including user interaction and graph calls) to that function. Control returns to the shell loop after `handleAnalyzeCommand` completes.
+        *   **`analyze`:** Calls `handleAnalyzeCommand(args)` from `src/cli/AnalyzeCommand.ts`, delegating the entire analysis workflow (which now uses `--inputs <directory>` instead of `--file`). Control returns to the shell loop after `handleAnalyzeCommand` completes.
         *   **Default:** For any other command, `handleDefaultCommand(commandInput)` is called. This function prepares a basic initial state and calls `agentApp.invoke()` for a single, non-interactive graph execution, displaying the result.
     *   The shell loop continues, prompting for the next command unless `exit` was entered.
     *   Relevant Code: [`shell.ts`](../src/cli/shell.ts) (main loop, `getCommandInput`, `parseCommand`, `switch` statement)

@@ -4,9 +4,9 @@ This document details the execution flow of the `analyze` command within the Arc
 
 ## Overview
 
-The `analyze` command allows users to initiate an analysis task by providing an initial query and relevant file paths. The system then enters a conversational loop where an AI agent (represented by LangGraph nodes) interacts with the user, asking clarifying questions until the user approves a proposed solution.
+The `analyze` command allows users to initiate an analysis task by providing an initial query and an input directory path (`--inputs`). The system reads relevant files (`.txt`, `.md`) from this directory and then enters a conversational loop where an AI agent (represented by LangGraph nodes) interacts with the user, asking clarifying questions until the user approves a proposed solution or indicates they are done.
 
-This flow leverages LangGraph's state management, checkpointers, and interrupt mechanism, combined with a specific two-node structure (`AnalysisPrepareNode` and `AnalysisInterruptNode`) identified through troubleshooting as necessary for correct state handling during interrupts.
+This flow leverages LangGraph's state management, checkpointers, and interrupt mechanism, combined with a specific two-node structure (`AnalysisPrepareNode` and `AnalysisInterruptNode`). The actual LLM interaction happens within `AnalysisPrepareNode` via an abstracted `callLLM` function which utilizes `callOpenAI` from `src/agents/LLMUtils.ts`.
 
 ## Visual Flow Diagram
 
@@ -18,11 +18,11 @@ sequenceDiagram
     participant AgentGraph
     participant Checkpointer
 
-    User->>Shell: analyze --query "..." --file ...
+    User->>Shell: analyze --query "..." --inputs <dir_path>
     Shell->>Shell: parseCommand(input)
     Shell->>AnalyzeCommand: handleAnalyzeCommand(args)
-    AnalyzeCommand->>AnalyzeCommand: parseArgs(args)
-    AnalyzeCommand->>AnalyzeCommand: readFiles(files)
+    AnalyzeCommand->>AnalyzeCommand: parseArgs(args) -> {query, inputsDir}
+    AnalyzeCommand->>AnalyzeCommand: readFiles(inputsDir) -> fileContents
     AnalyzeCommand->>AnalyzeCommand: Create initial AppState & config (thread_id)
     AnalyzeCommand->>AnalyzeCommand: Start Execution Loop (while !analysisDone)
     AnalyzeCommand->>AnalyzeCommand: analysisIteration(currentInput, config)
@@ -31,7 +31,7 @@ sequenceDiagram
     AgentGraph->>AgentGraph: START -> Evaluate Initial Routing
     Note right of AgentGraph: Based on userInput keywords
     AgentGraph->>AgentGraph: Route -> AnalysisPrepareNode
-    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (LLM call, prepare query)
+    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (construct prompt, callLLM->callOpenAI, prepare query)
     Note right of AgentGraph: Returns state update (history, query)
     AgentGraph->>Checkpointer: Save State (after Prepare returns)
     AgentGraph->>AgentGraph: Route: AnalysisPrepareNode -> AnalysisInterruptNode
@@ -56,7 +56,7 @@ sequenceDiagram
     AgentGraph->>AgentGraph: Run AnalysisPrepareNode
     Note right of AgentGraph: Processes response from state.userInput, adds to history
     
-    loop Until User Provides "SOLUTION APPROVED"
+    loop Until User Provides "SOLUTION APPROVED" or similar
         AnalyzeCommand->>AnalyzeCommand: analysisIteration calls runGraph
         AgentGraph->>AgentGraph: Prepare -> Interrupt -> Pause
         AgentGraph->>AnalyzeCommand: runGraph returns {interrupted: true, query: ...}
@@ -67,13 +67,13 @@ sequenceDiagram
         AnalyzeCommand->>AnalyzeCommand: analysisIteration returns {isDone: false, newInput: Command}
     end
 
-    Note over User, AnalyzeCommand: User eventually provides "SOLUTION APPROVED"
+    Note over User, AnalyzeCommand: User eventually provides approval/done keyword
     
     AnalyzeCommand->>AnalyzeCommand: analysisIteration(currentInput, config)
     AnalyzeCommand->>AnalyzeCommand: runGraph(currentInput, config)
     AnalyzeCommand->>AgentGraph: app.stream(currentInput, config)
-    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (processes "SOLUTION APPROVED")
-    AgentGraph->>AgentGraph: Calls returnFinalOutput
+    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (processes approval keyword)
+    AgentGraph->>AgentGraph: Calls returnFinalOutput (calls callLLM -> callOpenAI for final summary)
     Note right of AgentGraph: Returns state update {analysisOutput: "..."}
     AgentGraph->>Checkpointer: Save State (after Prepare returns)
     AgentGraph->>AgentGraph: Route: AnalysisPrepareNode -> END
@@ -91,16 +91,16 @@ sequenceDiagram
 ## Detailed Step-by-Step Description
 
 1.  **User Invocation (`src/cli/shell.ts`):**
-    *   The user types the `analyze` command in the Archie shell.
+    *   The user types the `analyze` command in the Archie shell (e.g., `analyze --query "Implement feature X" --inputs ./docs/feature_x`).
     *   The `startShell` loop calls `getCommandInput` to read the raw input.
     *   `parseCommand` is called to split the input into the command (`analyze`) and arguments (`args`).
     *   The `switch` statement detects the `analyze` command and calls `handleAnalyzeCommand(args)` from `src/cli/AnalyzeCommand.ts`.
 
 2.  **Preprocessing (`src/cli/AnalyzeCommand.ts`):**
-    *   `handleAnalyzeCommand` calls `parseArgs(args)` to extract the `--query` value and `--file` paths.
-    *   It calls `readFiles(files)` to read the content of the specified files into the `fileContents` record.
+    *   `handleAnalyzeCommand` calls `parseArgs(args)` to extract the `--query` value and `--inputs` directory path (`inputsDir`).
+    *   It calls `readFiles(inputsDir)` to read the content of `.txt` and `.md` files within the specified directory into the `fileContents` record.
     *   A unique `thread_id` is generated.
-    *   The initial `AppState` object is created.
+    *   The initial `AppState` object is created (`userInput`, `fileContents`, empty `analysisHistory`, etc.).
     *   The `config` object containing the `thread_id` is prepared.
 
 3.  **Analysis Execution Loop Start (`handleAnalyzeCommand` in `src/cli/AnalyzeCommand.ts`):**
@@ -123,8 +123,8 @@ sequenceDiagram
 7.  **Analysis Preparation (`src/agents/AnalysisPrepareNode.ts`):**
     *   `analysisPrepareNode` executes.
     *   **Input Handling:** Processes `state.userInput` (initial query or resumed input) and adds it to `analysisHistory`.
-    *   **Approval Check:** Checks `analysisHistory` for "SOLUTION APPROVED". If found, calls `returnFinalOutput` and returns the final state update, leading eventually to `END`.
-    *   **Conversational Turn (If not approved):** Calls LLM placeholder, prepares state update (`analysisHistory`, `currentAnalysisQuery`), and returns it.
+    *   **Approval Check:** Checks `analysisHistory` using `userIsDone` helper for keywords like "SOLUTION APPROVED" or "DONE". If found, calls `returnFinalOutput` and returns the final state update, leading eventually to `END`.
+    *   **Conversational Turn (If not approved):** Determines prompt type (`initial` or `followup`). Calls the abstracted `callLLM` function, passing history, file contents, and prompt type. `callLLM` constructs a detailed prompt and invokes `callOpenAI` (from `LLMUtils.ts`) for the actual API call. Prepares state update (`analysisHistory` including new agent message, `currentAnalysisQuery` with agent's response/question), and returns it.
 
 8.  **Transition to Interrupt (`src/agents/graph.ts` conditional edge):**
     *   The conditional edge after `ANALYSIS_PREPARE` evaluates the returned state.
@@ -163,8 +163,8 @@ sequenceDiagram
     *   Execution returns to **Step 7** (`AnalysisPrepareNode`), which now receives the user's response via `state.userInput`.
 
 14. **Completion (`AnalysisPrepareNode` -> `END` -> `analysisIteration` -> `handleAnalyzeCommand`):**
-    *   Eventually, the user provides "SOLUTION APPROVED".
-    *   `AnalysisPrepareNode` detects it, returns the final state update with `analysisOutput` populated.
+    *   Eventually, the user provides an approval/done keyword.
+    *   `AnalysisPrepareNode` detects it via `userIsDone`, calls `returnFinalOutput`, which calls `callLLM('final')` to generate the summary. It returns the final state update with `analysisOutput` populated.
     *   The conditional edge after `ANALYSIS_PREPARE` routes to `END`.
     *   The `agentApp.stream` call in `runGraph` finishes.
     *   `runGraph` returns `{ interrupted: false, ... }`.
@@ -172,6 +172,6 @@ sequenceDiagram
     *   Since `interrupted` is false, `analysisIteration` returns `{ isDone: true, newInput: currentInput }`.
     *   The main `while` loop in `handleAnalyzeCommand` receives `{ isDone: true, ... }`.
     *   It sets `analysisDone = true`, ending the loop.
-    *   `agentApp.getState(config)` retrieves the final state.
+    *   `agentApp.getState(config)` (using the bound function via `getStateFn`) retrieves the final state snapshot including the checkpointer.
     *   The `analysisOutput` is displayed (via `say`).
     *   `handleAnalyzeCommand` finishes, returning control to the main shell loop in `src/cli/shell.ts`. 
