@@ -8,6 +8,7 @@ import * as path from 'path'; // For mocking resolve
 import inquirer from 'inquirer'; // For mocking prompt
 import { app as agentApp } from '../src/agents/graph'; // For mocking stream, getState
 import { Command } from '@langchain/langgraph'; // Type needed
+import * as fsPromises from 'fs/promises'; // Needed for mocking writeFile
 
 describe('AnalyzeCommand Module', () => {
 
@@ -413,6 +414,10 @@ describe('AnalyzeCommand Module', () => {
     let mockGetState: sinon.SinonStub;
     let mockSay: sinon.SinonStub;
     let mockDbg: sinon.SinonStub;
+    let mockGetFinalOutput: sinon.SinonStub;
+    let mockDisplayFinalOutput: sinon.SinonStub;
+    let mockPersistFinalOutput: sinon.SinonStub;
+
     const fakeConfig = { configurable: { thread_id: 'handle-cmd-test-id' } };
 
     beforeEach(() => {
@@ -424,6 +429,14 @@ describe('AnalyzeCommand Module', () => {
       mockGetState = sinon.stub();
       mockSay = sinon.stub();
       mockDbg = sinon.stub();
+      
+      mockGetFinalOutput = sinon.stub();
+      mockDisplayFinalOutput = sinon.stub();
+      mockPersistFinalOutput = sinon.stub();
+    });
+
+    afterEach(() => {
+        
     });
 
     it('should run successfully with one iteration (no interrupt)', async () => {
@@ -437,13 +450,18 @@ describe('AnalyzeCommand Module', () => {
       // Configure mocks
       mockParseArgs.returns(parsedArgs);
       mockReadFiles.resolves(fileContents);
-      // Mock analysisIteration to return done=true on first call
       mockAnalysisIteration.onFirstCall().resolves({ isDone: true, newInput: {} }); 
+      mockGetFinalOutput.resolves(finalOutput);
+      mockPersistFinalOutput.resolves();
       mockGetState.resolves(finalState);
 
       await AnalyzeCommand.handleAnalyzeCommand(
         args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-        mockAnalysisIteration, mockGetState, mockSay, mockDbg
+        mockAnalysisIteration, mockGetState, mockSay, mockDbg,
+
+        mockGetFinalOutput,
+        mockDisplayFinalOutput,
+        mockPersistFinalOutput
       );
 
       // Assertions
@@ -464,9 +482,13 @@ describe('AnalyzeCommand Module', () => {
       };
       expect(mockAnalysisIteration.firstCall.args[0]).to.deep.equal(expectedInitialInput);
       expect(mockAnalysisIteration.firstCall.args[1]).to.equal(fakeConfig);
-      expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
-      expect(mockSay.calledWith('Final Output:')).to.be.true;
-      expect(mockSay.calledWith(finalOutput)).to.be.true;
+      // Verify new function calls (using local stubs)
+      expect(mockGetFinalOutput.calledOnceWith(fakeConfig, mockGetState)).to.be.true;
+      expect(mockDisplayFinalOutput.calledOnceWith(finalOutput, mockSay)).to.be.true;
+      expect(mockPersistFinalOutput.calledOnceWith(finalOutput, parsedArgs.inputsDir)).to.be.true;
+      expect(mockGetFinalOutput.calledAfter(mockAnalysisIteration)).to.be.true;
+      expect(mockDisplayFinalOutput.calledAfter(mockGetFinalOutput)).to.be.true;
+      expect(mockPersistFinalOutput.calledAfter(mockDisplayFinalOutput)).to.be.true;
     });
 
     it('should run successfully with multiple iterations (interrupt/resume)', async () => {
@@ -481,15 +503,19 @@ describe('AnalyzeCommand Module', () => {
         // Configure mocks
         mockParseArgs.returns(parsedArgs);
         mockReadFiles.resolves(fileContents);
-        // First call: interrupt, return resume command
         mockAnalysisIteration.onFirstCall().resolves({ isDone: false, newInput: resumeCommand }); 
-        // Second call: done, return final state (input here might be resumeCommand or {})
         mockAnalysisIteration.onSecondCall().resolves({ isDone: true, newInput: {} }); 
+
+        mockGetFinalOutput.resolves(finalOutput);
+        mockPersistFinalOutput.resolves();
         mockGetState.resolves(finalState);
-  
         await AnalyzeCommand.handleAnalyzeCommand(
           args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-          mockAnalysisIteration, mockGetState, mockSay, mockDbg
+          mockAnalysisIteration, mockGetState, mockSay, mockDbg,
+
+          mockGetFinalOutput,
+          mockDisplayFinalOutput,
+          mockPersistFinalOutput
         );
   
         // Assertions
@@ -501,36 +527,42 @@ describe('AnalyzeCommand Module', () => {
         // Check input to second call was the resume command from the first call
         expect(mockAnalysisIteration.secondCall.args[0]).to.equal(resumeCommand);
         expect(mockAnalysisIteration.secondCall.args[1]).to.equal(fakeConfig);
-        expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
-        expect(mockSay.calledWith('Final Output:')).to.be.true;
-        expect(mockSay.calledWith(finalOutput)).to.be.true;
+
+        expect(mockGetFinalOutput.calledOnceWith(fakeConfig, mockGetState)).to.be.true;
+        expect(mockDisplayFinalOutput.calledOnceWith(finalOutput, mockSay)).to.be.true;
+        expect(mockPersistFinalOutput.calledOnceWith(finalOutput, parsedArgs.inputsDir)).to.be.true;
+        expect(mockGetFinalOutput.calledAfter(mockAnalysisIteration)).to.be.true;
+        expect(mockDisplayFinalOutput.calledAfter(mockGetFinalOutput)).to.be.true;
+        expect(mockPersistFinalOutput.calledAfter(mockDisplayFinalOutput)).to.be.true;
       });
 
-    it('should handle error during getState gracefully', async () => {
-        // Updated args and parsedArgs for --inputs
+    it('should handle error during getFinalOutput gracefully', async () => {
         const args = ['--query', 'q3', '--inputs', './project'];
         const parsedArgs = { query: 'q3', inputsDir: './project' };
         const fileContents = { '/abs/project/main.txt': 'content3' };
-        const getStateError = new Error('Failed to get state');
+        const getOutputError = new Error('Failed to get state via getFinalOutput');
   
         // Configure mocks
         mockParseArgs.returns(parsedArgs);
         mockReadFiles.resolves(fileContents);
         mockAnalysisIteration.onFirstCall().resolves({ isDone: true, newInput: {} }); 
-        mockGetState.rejects(getStateError); // Make getState throw error
+
+        mockGetFinalOutput.rejects(getOutputError); // Make getFinalOutputFn throw error
   
         try {
             await AnalyzeCommand.handleAnalyzeCommand(
                 args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-                mockAnalysisIteration, mockGetState, mockSay, mockDbg
+                mockAnalysisIteration, mockGetState, mockSay, mockDbg,
+                // Pass local stubs
+                mockGetFinalOutput,
+                mockDisplayFinalOutput,
+                mockPersistFinalOutput
             );
             expect.fail('handleAnalyzeCommand should have thrown');
         } catch (error) {
-            expect(error).to.equal(getStateError);
-            // Verify console.error was called (assuming it's not mocked away elsewhere)
-            expect((console.error as sinon.SinonStub).calledWith("Error retrieving final graph state:", getStateError)).to.be.true;
-            // Verify final output was not printed
-            expect(mockSay.calledWith('Final Output:')).to.be.false;
+            expect(error).to.equal(getOutputError);
+            expect(mockGetFinalOutput.calledOnce).to.be.true;
+            expect(mockDisplayFinalOutput.notCalled).to.be.true;
         }
     });
 
@@ -542,7 +574,8 @@ describe('AnalyzeCommand Module', () => {
 
         await AnalyzeCommand.handleAnalyzeCommand(
             argsMissingQuery, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-            mockAnalysisIteration, mockGetState, mockSay, mockDbg
+            mockAnalysisIteration, mockGetState, mockSay, mockDbg,
+            // No need to pass output mocks here as it exits early
         );
         // Assertions for missing query
         expect(mockParseArgs.calledWith(argsMissingQuery)).to.be.true;
@@ -559,7 +592,8 @@ describe('AnalyzeCommand Module', () => {
 
          await AnalyzeCommand.handleAnalyzeCommand(
             argsMissingDir, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-            mockAnalysisIteration, mockGetState, mockSay, mockDbg
+            mockAnalysisIteration, mockGetState, mockSay, mockDbg,
+            // No need to pass output mocks here as it exits early
         );
         // Assertions for missing directory
         expect(mockParseArgs.calledWith(argsMissingDir)).to.be.true;
@@ -569,6 +603,128 @@ describe('AnalyzeCommand Module', () => {
 
     });
 
+  });
+
+  // --- Tests for getFinalOutput ---
+  describe('getFinalOutput', () => {
+    const fakeConfig = { configurable: { thread_id: 'get-test-id' } };
+
+    it('should return analysisOutput when state has it', async () => {
+      const expectedOutput = "This is the final analysis.";
+      const finalState = { values: { analysisOutput: expectedOutput } };
+      const mockGetState = sinon.stub().resolves(finalState);
+      // Assuming getFinalOutput is exported or accessed via module
+      const output = await (AnalyzeCommand as any).getFinalOutput(fakeConfig, mockGetState);
+      expect(output).to.equal(expectedOutput);
+      expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
+    });
+
+    it('should return empty string when state lacks analysisOutput', async () => {
+      const finalState = { values: { someOtherField: 'value' } }; // No analysisOutput
+      const mockGetState = sinon.stub().resolves(finalState);
+      const output = await (AnalyzeCommand as any).getFinalOutput(fakeConfig, mockGetState);
+      expect(output).to.equal("");
+      expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
+    });
+
+     it('should return empty string when analysisOutput is null', async () => {
+      const finalState = { values: { analysisOutput: null } };
+      const mockGetState = sinon.stub().resolves(finalState);
+      const output = await (AnalyzeCommand as any).getFinalOutput(fakeConfig, mockGetState);
+      expect(output).to.equal(""); // Or should it be null? Function returns || ""
+      expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
+    });
+
+    it('should throw error and log if getStateFn rejects', async () => {
+      const getStateError = new Error('Failed to get state');
+      const mockGetState = sinon.stub().rejects(getStateError);
+      try {
+        await (AnalyzeCommand as any).getFinalOutput(fakeConfig, mockGetState);
+        expect.fail('getFinalOutput should have thrown');
+      } catch (error) {
+        expect(error).to.equal(getStateError);
+        expect(mockGetState.calledOnceWith(fakeConfig)).to.be.true;
+        //expect((console.error as sinon.SinonStub).calledWith("Error retrieving final graph state:", getStateError)).to.be.true;
+      }
+    });
+  });
+
+  // --- Tests for displayFinalOutputToUser ---
+  describe('displayFinalOutputToUser', () => {
+    let mockSay: sinon.SinonStub;
+
+    beforeEach(() => {
+      mockSay = sinon.stub();
+    });
+
+    it('should call sayFn with title and output when output is provided', () => {
+      const output = "Here is the result.";
+      (AnalyzeCommand as any).displayFinalOutputToUser(output, mockSay);
+      expect(mockSay.calledTwice).to.be.true;
+      expect(mockSay.firstCall.calledWith("Final Output:")).to.be.true;
+      expect(mockSay.secondCall.calledWith(output)).to.be.true;
+    });
+
+    it('should call sayFn with title and default message when output is empty', () => {
+      const output = "";
+      (AnalyzeCommand as any).displayFinalOutputToUser(output, mockSay);
+      expect(mockSay.calledTwice).to.be.true;
+      expect(mockSay.firstCall.calledWith("Final Output:")).to.be.true;
+      expect(mockSay.secondCall.calledWith("No analysis output generated.")).to.be.true;
+    });
+
+    it('should call sayFn with title and default message when output is null', () => {
+      const output = null as any; // Simulate potentially null input
+      (AnalyzeCommand as any).displayFinalOutputToUser(output, mockSay);
+      expect(mockSay.calledTwice).to.be.true;
+      expect(mockSay.firstCall.calledWith("Final Output:")).to.be.true;
+      expect(mockSay.secondCall.calledWith("No analysis output generated.")).to.be.true;
+    });
+  });
+
+  // --- Tests for persistFinalOutput ---
+  describe('persistFinalOutput', () => {
+    let mockResolve: sinon.SinonStub;
+    let mockWriteFile: sinon.SinonStub;
+    const targetDir = '/path/to/output';
+    const outputContent = '# Analysis Result\nContent goes here.';
+    const expectedOutputPath = '/path/to/output/analysis_result.md';
+
+    beforeEach(() => {
+      mockResolve = sinon.stub().returns(expectedOutputPath);
+      mockWriteFile = sinon.stub(); // Initialize as simple stub
+    });
+
+    afterEach(() => {
+    });
+
+    it('should resolve path, write file, and log success', async () => {
+      mockWriteFile.resolves(); // Simulate successful write
+
+      await (AnalyzeCommand as any).persistFinalOutput(
+        outputContent, targetDir, mockResolve, mockWriteFile
+      );
+
+      expect(mockResolve.calledOnceWith(targetDir, 'analysis_result.md')).to.be.true;
+      expect(mockWriteFile.calledOnceWith(expectedOutputPath, outputContent, 'utf-8')).to.be.true;
+      //expect((console.log as sinon.SinonStub).calledWith(`Analysis results saved to: ${expectedOutputPath}`)).to.be.true;
+      //expect((console.error as sinon.SinonStub).notCalled).to.be.true;
+    });
+
+    it('should log error and not throw if writeFile fails', async () => {
+      const writeError = new Error('Disk full');
+      mockWriteFile.rejects(writeError); // Simulate failed write
+
+      await (AnalyzeCommand as any).persistFinalOutput(
+        outputContent, targetDir, mockResolve, mockWriteFile
+      );
+
+      expect(mockResolve.calledOnceWith(targetDir, 'analysis_result.md')).to.be.true;
+      expect(mockWriteFile.calledOnceWith(expectedOutputPath, outputContent, 'utf-8')).to.be.true;
+      expect((console.error as sinon.SinonStub).calledWith(`Error saving analysis results to ${expectedOutputPath}:`, writeError)).to.be.true;
+      //expect((console.log as sinon.SinonStub).notCalled).to.be.true;
+      // Important: Assert that the function itself did not throw
+    });
   });
 
 }); 

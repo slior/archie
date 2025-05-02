@@ -1,10 +1,10 @@
 import { Command } from "@langchain/langgraph";
-import * as shell from "./shell"; // Import shell namespace for defaults
+// import * as shell from "./shell"; // Import shell namespace for defaults
 import { dbg, say, newGraphConfig, Input, SayFn, DbgFn } from "./shell"; 
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import inquirer from 'inquirer';
-import { app as agentApp, AppState } from "../agents/graph"; // Keep agentApp for getState default
+import { app as agentApp, AppState } from "../agents/graph";
 
 
 // Define types for the dependency functions
@@ -28,6 +28,9 @@ type AnalysisIterationFn = (
 type NewGraphConfigFn = typeof newGraphConfig;
 type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
 
+type GetFinalOutputFn = typeof getFinalOutput;
+type DisplayFinalOutputFn = typeof displayFinalOutputToUser;
+type PersistFinalOutputFn = typeof persistFinalOutput;
 
 /**
  * Handles the 'analyze' command by initiating an interactive analysis session with the agent.
@@ -55,6 +58,9 @@ type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
  * @param getStateFn 
  * @param sayFn 
  * @param dbgFn 
+ * @param getFinalOutputFn 
+ * @param displayFinalOutputFn 
+ * @param persistFinalOutputFn 
  * @throws Error if there are issues accessing the graph state or other runtime errors
  */
 export async function handleAnalyzeCommand(
@@ -66,7 +72,10 @@ export async function handleAnalyzeCommand(
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
     getStateFn: GetStateFn = agentApp.getState.bind(agentApp), // Inject agentApp.getState
     sayFn: SayFn = say,
-    dbgFn: DbgFn = dbg
+    dbgFn: DbgFn = dbg,
+    getFinalOutputFn: GetFinalOutputFn = getFinalOutput,
+    displayFinalOutputFn: DisplayFinalOutputFn = displayFinalOutputToUser,
+    persistFinalOutputFn: PersistFinalOutputFn = persistFinalOutput
 ) {
 
     const { query, inputsDir } = parseArgsFn(args);
@@ -94,28 +103,50 @@ export async function handleAnalyzeCommand(
     let analysisDone = false;
     while (!analysisDone)
     {
-        // Pass down necessary functions if analysisIterationFn needs them explicitly,
-        // otherwise rely on its defaults (or ensure the injected one is pre-configured)
         const { isDone, newInput } = await analysisIterationFn(currentInput, config);
         currentInput = newInput;
         analysisDone = isDone;
     }   
 
-    await getAndOutputFinalOutput(config, getStateFn, sayFn);
+    // Get, display, and persist the final output
+    const finalOutput = await getFinalOutputFn(config, getStateFn);
+    displayFinalOutputFn(finalOutput, sayFn);
+    await persistFinalOutputFn(finalOutput, inputsDir); 
 }
 
-async function getAndOutputFinalOutput(config: any, getStateFn: GetStateFn, sayFn: SayFn = shell.say)
+export async function getFinalOutput(config: any, getStateFn: GetStateFn): Promise<string> 
 {
     try
     {
         const finalState = await getStateFn(config);
-        sayFn("Final Output:");
-        sayFn(finalState.values.analysisOutput || "No analysis output generated.");
+        return finalState.values.analysisOutput || ""; // Return empty string if undefined
     } 
     catch (error) 
     { 
         console.error("Error retrieving final graph state:", error);
         throw error;
+    }
+}
+
+export function displayFinalOutputToUser(output: string, sayFn: SayFn = say)
+{
+    sayFn("Final Output:");
+    sayFn(output || "No analysis output generated.");
+}
+
+export async function persistFinalOutput(
+    output: string, 
+    targetDir: string, 
+    resolveFn: ResolveFn = path.resolve, 
+    writeFileFn = fsPromises.writeFile
+) {
+    const outputPath = resolveFn(targetDir, 'analysis_result.md');
+    try {
+        await writeFileFn(outputPath, output, 'utf-8');
+        console.log(`Analysis results saved to: ${outputPath}`);
+    } catch (error) {
+        console.error(`Error saving analysis results to ${outputPath}:`, error);
+        // Log error but don't throw, as displaying output might still be useful
     }
 }
 
@@ -125,8 +156,8 @@ export async function analysisIteration(
     // Inject dependencies
     runGraphFn: RunGraphFn = runGraph,
     promptFn: PromptFn = inquirer.prompt,
-    sayFn: SayFn = shell.say,
-    dbgFn: DbgFn = shell.dbg
+    sayFn: SayFn = say,
+    dbgFn: DbgFn = dbg
 ) : Promise<{ isDone: boolean, newInput: Input }>
 {
     const {interrupted, agentQuery} = await runGraphFn(currentInput, config); 

@@ -81,9 +81,12 @@ sequenceDiagram
     AnalyzeCommand->>AnalyzeCommand: analysisIteration checks interrupted == false
     AnalyzeCommand->>AnalyzeCommand: analysisIteration returns {isDone: true, newInput: ...}
     AnalyzeCommand->>AnalyzeCommand: Loop finishes (analysisDone = true)
-    AnalyzeCommand->>AgentGraph: app.getState(config)
-    AgentGraph->>AnalyzeCommand: Return finalState snapshot
-    AnalyzeCommand->>User: Display finalState.values.analysisOutput (via Shell.say)
+    AnalyzeCommand->>AnalyzeCommand: getFinalOutput(config, getStateFn) # Get final output string
+    Note right of AnalyzeCommand: Internally calls agentApp.getState
+    AnalyzeCommand->>AnalyzeCommand: Returns finalOutput string
+    AnalyzeCommand->>User: displayFinalOutputToUser(finalOutput, sayFn) # Display on console
+    AnalyzeCommand->>AnalyzeCommand: persistFinalOutput(finalOutput, inputsDir) # Save to file
+    Note right of AnalyzeCommand: Writes to <inputsDir>/analysis_result.md
     AnalyzeCommand->>Shell: handleAnalyzeCommand returns
     Shell->>Shell: Wait for next command
 ```
@@ -172,6 +175,7 @@ sequenceDiagram
     *   Since `interrupted` is false, `analysisIteration` returns `{ isDone: true, newInput: currentInput }`.
     *   The main `while` loop in `handleAnalyzeCommand` receives `{ isDone: true, ... }`.
     *   It sets `analysisDone = true`, ending the loop.
-    *   `agentApp.getState(config)` (using the bound function via `getStateFn`) retrieves the final state snapshot including the checkpointer.
-    *   The `analysisOutput` is displayed (via `say`).
+    *   `handleAnalyzeCommand` calls `getFinalOutput(config, getStateFn)` to retrieve the final analysis string (this function internally uses the `getStateFn` which points to `agentApp.getState`).
+    *   `handleAnalyzeCommand` then calls `displayFinalOutputToUser(finalOutput, sayFn)` to display the result on the console.
+    *   Finally, `handleAnalyzeCommand` calls `persistFinalOutput(finalOutput, inputsDir)` to save the result to `analysis_result.md` in the original input directory.
     *   `handleAnalyzeCommand` finishes, returning control to the main shell loop in `src/cli/shell.ts`. 

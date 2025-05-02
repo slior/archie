@@ -142,6 +142,8 @@ This section records the execution process based on the plan above.
 *   **Checklist Item 24:** Initial `README.md` file created with setup and usage instructions.
 *   **Execution End:** All checklist items completed, with deviations noted for item 4 (.env creation) and the resolution process for item 20 (graph compilation). System ready for basic testing as per REVIEW mode assessment.
 
+
+
 ## Analysis Agent Implementation Plan
 
 This section details the plan for adding the "Analysis Agent," designed for multi-turn conversational analysis based on user queries and provided files.
@@ -182,3 +184,15 @@ This section details the plan for adding the "Analysis Agent," designed for mult
         *   Resume the graph execution by feeding a `new Command({ resume: userResponse })` back into the stream loop.
         *   When the graph finishes without interruption, retrieve the final state using `app.getState()` and display the `analysisOutput`.
     *   The previous default behavior (invoking the graph directly with any input) will be refactored into a separate handler (`handleDefaultCommand`). 
+
+### Persisting Output
+
+IMPLEMENTATION CHECKLIST:
+
+1.  [Rename function `getAndOutputFinalOutput` to `getFinalOutput` in `src/cli/AnalyzeCommand.ts`.]
+2.  [Modify the signature and logic of the newly renamed `getFinalOutput` function in `src/cli/AnalyzeCommand.ts` to return `Promise<string>` and remove console logging, returning `finalState.values.analysisOutput || ""` as specified in Plan Details Step 2.]
+3.  [Create the new function `displayFinalOutputToUser` in `src/cli/AnalyzeCommand.ts` with the signature and logic specified in Plan Details Step 3.]
+4.  [Create the new async function `persistFinalOutput` in `src/cli/AnalyzeCommand.ts` with the signature and logic specified in Plan Details Step 4, using `path.resolve` and `fsPromises.writeFile`.]
+5.  [Update the `handleAnalyzeCommand` function in `src/cli/AnalyzeCommand.ts` (around line 102) to call `getFinalOutput`, `displayFinalOutputToUser`, and `persistFinalOutput` sequentially, replacing the old call, as specified in Plan Details Step 5.]
+6.  [Verify that `path` and `fsPromises` are correctly imported at the top of `src/cli/AnalyzeCommand.ts`.]
+7.  [Update the documentation file `docs/analyze_flow.md` (text description around step 14 and the Mermaid diagram) to reflect the changes in `handleAnalyzeCommand` regarding final output retrieval, display, and persistence, as specified in Plan Details Step 7.]
