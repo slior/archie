@@ -143,7 +143,7 @@ export async function persistFinalOutput(
     const outputPath = resolveFn(targetDir, 'analysis_result.md');
     try {
         await writeFileFn(outputPath, output, 'utf-8');
-        console.log(`Analysis results saved to: ${outputPath}`);
+        say(`Analysis results saved to: ${outputPath}`);
     } catch (error) {
         console.error(`Error saving analysis results to ${outputPath}:`, error);
         // Log error but don't throw, as displaying output might still be useful
@@ -196,7 +196,7 @@ export async function readFiles(
 
         for (const filename of filesToRead) {
             const resolvedPath = resolveFn(directoryPath, filename);
-            console.log(`Reading file: ${resolvedPath}`);
+            dbg(`Reading file: ${resolvedPath}`);
             try {
                  fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
             } catch (readError) {
