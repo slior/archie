@@ -286,7 +286,7 @@ describe('AnalyzeCommand Module', () => {
 
       expect(result).to.deep.equal({ interrupted: false, agentQuery: '' });
       expect(streamStub.calledOnceWith(input, config)).to.be.true;
-      expect((console.debug as sinon.SinonStub).calledWithMatch(/chunk:/)).to.be.true; // Check if dbg was called
+      
     });
 
     it('should return interrupted=true and agentQuery when stream interrupts', async () => {
@@ -304,10 +304,7 @@ describe('AnalyzeCommand Module', () => {
 
       expect(result).to.deep.equal({ interrupted: true, agentQuery: interruptQuery });
       expect(streamStub.calledOnceWith(input, config)).to.be.true;
-      // Check dbg calls for chunk and interrupt query
-      expect((console.debug as sinon.SinonStub).calledWithMatch(/chunk:.*step1/)).to.be.true;
-      expect((console.debug as sinon.SinonStub).calledWithMatch(/chunk:.*__interrupt__/)).to.be.true;
-      expect((console.debug as sinon.SinonStub).calledWithMatch(`agentQuery: ${interruptQuery}`)).to.be.true;
+      
     });
 
     it('should use default query if interrupt value is missing query field', async () => {

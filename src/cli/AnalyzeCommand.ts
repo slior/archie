@@ -101,12 +101,14 @@ export async function handleAnalyzeCommand(
         analysisDone = isDone;
     }   
 
-    // Final Output
+    await getAndOutputFinalOutput(config, getStateFn, sayFn);
+}
+
+async function getAndOutputFinalOutput(config: any, getStateFn: GetStateFn, sayFn: SayFn = shell.say)
+{
     try
     {
         const finalState = await getStateFn(config);
-        
-        // const finalState = await agentApp.getState(config);
         sayFn("Final Output:");
         sayFn(finalState.values.analysisOutput || "No analysis output generated.");
     } 
@@ -114,7 +116,7 @@ export async function handleAnalyzeCommand(
     { 
         console.error("Error retrieving final graph state:", error);
         throw error;
-    } 
+    }
 }
 
 export async function analysisIteration(
@@ -217,7 +219,7 @@ export async function runGraph(currentInput: Input, config: any) : Promise<{inte
         stream = await agentApp.stream(currentInput, config);
 
         for await (const chunk of stream) {
-            dbg(`chunk: ${JSON.stringify(chunk)}`);
+            
             if (chunk.__interrupt__) {
                 interrupted = true;
                 // Extract query from the first interrupt object's value

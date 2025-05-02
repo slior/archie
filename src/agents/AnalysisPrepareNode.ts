@@ -9,15 +9,14 @@ import * as path from 'path'; // Import path here
 type Role = 'user' | 'agent';
 type HistoryMessage = { role: Role; content: string };
 
-/**
- * Abstracted LLM call function.
- * Constructs the appropriate prompt based on the context and calls the underlying LLM utility.
- */
-async function callLLM(
-    history: HistoryMessage[], 
-    files: Record<string, string>,
-    promptType: 'initial' | 'followup' | 'final'
-): Promise<string> {
+const PROMPT_TYPE_INITIAL = 'initial';
+const PROMPT_TYPE_FOLLOWUP = 'followup';
+const PROMPT_TYPE_FINAL = 'final';
+type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typeof PROMPT_TYPE_FINAL;
+
+
+function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Record<string, string>) : string
+{
     dbg(`\n--- Constructing LLM Prompt (Type: ${promptType}) ---`);
     let constructedPrompt: string;
     const fileList = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None'; // Use path.basename
@@ -25,10 +24,10 @@ async function callLLM(
     // Use history directly (callOpenAI expects the full history)
     // The prompt passed to callOpenAI is the specific instruction for *this* turn.
     
-    if (promptType === 'initial') {
+    if (promptType === PROMPT_TYPE_INITIAL) {
         const firstUserMessage = history.find(m => m.role === 'user')?.content || '(No initial query found)';
         constructedPrompt = `Analyze the user query based on the provided files. Files: [${fileList}]. User's initial query: "${firstUserMessage}". What is the primary goal for this analysis? Ask clarifying questions if needed.`;
-    } else if (promptType === 'final') {
+    } else if (promptType === PROMPT_TYPE_FINAL) {
         // Construct detailed final summary prompt
         constructedPrompt = `Based on the following conversation history: ${JSON.stringify(history)} and the context of files: [${fileList}], generate a final analysis summary for the user. The summary should include (if possible based on the conversation):
         - Identified assumptions
@@ -37,12 +36,25 @@ async function callLLM(
         - Summary of design decisions reached and why
         - A list of any open questions remaining.
         Provide only the summary content.`;
-    } else { // 'followup'
+    } else { // PROMPT_TYPE_FOLLOWUP
         // For follow-up, the history contains the context. The prompt should guide the LLM on what to do next.
         // We pass the full history to callOpenAI, and this prompt acts as the latest instruction.
         constructedPrompt = `Continue the analysis based on the latest user message in the history. Files provided: [${fileList}]. Ask further clarifying questions or provide analysis as appropriate.`;
     }
+    return constructedPrompt;
+}
 
+/**
+ * Abstracted LLM call function.
+ * Constructs the appropriate prompt based on the context and calls the underlying LLM utility.
+ */
+async function callLLM(
+    history: HistoryMessage[], 
+    files: Record<string, string>,
+    promptType: PromptType
+): Promise<string> {
+    
+    const constructedPrompt = getPrompt(promptType, history, files);
     dbg(`Prompt Instruction: ${constructedPrompt}`);
 
     try {
@@ -63,7 +75,7 @@ async function returnFinalOutput(
     say("Analysis Agent: Solution approved by user.");
     try {
         // Call the abstracted LLM function for the final summary
-        const finalOutput = await callLLM(currentHistory, state.fileContents, 'final');
+        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL);
         const finalAgentMsg = { role: 'agent' as const, content: "Okay, generating the final solution description." };
 
         return {
@@ -90,15 +102,10 @@ function userIsDone(userMessage: string) : boolean {
     return doneKeywords.some(keyword => userMessage.toUpperCase().includes(keyword));
 }
 
-export async function analysisPrepareNode(state: AppState): Promise<Partial<AppState>> { // Return type no longer includes interrupt
-    dbg("--- Analysis Prepare Node Running ---"); // Updated log
-    const currentUserInput = state.userInput;
-    // Ensure history is correctly typed using HistoryMessage
-    let currentHistory: HistoryMessage[] = state.analysisHistory || [];
-    dbg(`currentUserInput: ${currentUserInput}, currentHistory length: ${currentHistory.length}, currentAnalysisQuery: ${state.currentAnalysisQuery}`);
-    
-    // 1. Add user's resumed input to history (if applicable)
-    if (currentUserInput && state.currentAnalysisQuery) {
+function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInput: string) : HistoryMessage[]
+{
+
+    if (currentUserInput && currentHistory.length > 0) {
         dbg(`Analysis Prepare: Resuming with user input: ${currentUserInput}`);
         // Add user input to history before calling LLM
         currentHistory = currentHistory.concat({ role: 'user', content: currentUserInput });
@@ -108,16 +115,10 @@ export async function analysisPrepareNode(state: AppState): Promise<Partial<AppS
         // Add initial user input to history
         currentHistory = currentHistory.concat({ role: 'user', content: currentUserInput });
     }
+    return currentHistory;
+}
 
-    // 2. Check for approval keyword BEFORE calling LLM for this turn
-    const lastUserMessageContent = currentHistory.filter(m => m.role === 'user').pop()?.content || "";
-    if (userIsDone(lastUserMessageContent)) {
-        // If approved, generate final output
-        return await returnFinalOutput(currentHistory, lastUserMessageContent, state);
-    }
-
-    // 3. Normal conversational turn - Call LLM for the next step
-    dbg("Analysis Prepare: Calling LLM for next step.");
+async function callLLMForNextStep(currentHistory: HistoryMessage[], state: AppState) : Promise<Partial<AppState>> {
     try {
         // Determine prompt type based on history
         // Consider it 'initial' only if history *only* contains the first user message
@@ -139,13 +140,27 @@ export async function analysisPrepareNode(state: AppState): Promise<Partial<AppS
 
     } catch (error) {
         console.error("Error during analysisPrepareNode LLM call:", error);
-        // Return state indicating error to the user via interrupt
-        // const errorMessage = "Sorry, I encountered an error communicating with the language model. Please try again later.";
         throw error;
-        // return {
-        //     analysisHistory: currentHistory.concat([{ role: 'agent', content: errorMessage}]),
-        //     currentAnalysisQuery: errorMessage,
-        //     userInput: ""
-        // }
+        
     }
+}
+
+export async function analysisPrepareNode(state: AppState): Promise<Partial<AppState>> {
+    dbg("--- Analysis Prepare Node Running ---"); // Updated log
+    const currentUserInput = state.userInput;
+    // Ensure history is correctly typed using HistoryMessage
+    let currentHistory: HistoryMessage[] = state.analysisHistory || [];
+    
+    currentHistory = addUserInputToHistory(currentHistory, currentUserInput); // 1. Add user input to history
+    
+    const lastUserMessageContent = currentHistory.filter(m => m.role === 'user').pop()?.content || ""; // 2. Check for approval keyword BEFORE calling LLM for this turn
+    if (userIsDone(lastUserMessageContent)) {
+        // If approved, generate final output
+        return await returnFinalOutput(currentHistory, lastUserMessageContent, state);
+    }
+
+    // 3. Normal conversational turn - Call LLM for the next step
+    dbg("Analysis Prepare: Calling LLM for next step.");
+    
+    return await callLLMForNextStep(currentHistory, state);
 } 
