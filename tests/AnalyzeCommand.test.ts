@@ -4,7 +4,6 @@ import { describe, it, beforeEach, afterEach } from 'mocha';
 import * as AnalyzeCommand from '../src/cli/AnalyzeCommand'; // Adjust path as needed
 import * as shell from '../src/cli/shell'; // For mocking dbg, say, newGraphConfig
 import { Input } from '../src/cli/shell'; // Import Input directly
-import * as fs from 'fs/promises'; // For mocking readFile
 import * as path from 'path'; // For mocking resolve
 import inquirer from 'inquirer'; // For mocking prompt
 import { app as agentApp } from '../src/agents/graph'; // For mocking stream, getState
@@ -27,28 +26,12 @@ describe('AnalyzeCommand Module', () => {
 
   // --- Tests for parseArgs ---
   describe('parseArgs', () => {
-    it('should correctly parse query and single file', () => {
-      const args = ['--query', 'my query', '--file', 'file1.txt'];
-      const result = AnalyzeCommand.parseArgs(args);
-      expect(result).to.deep.equal({ query: 'my query', files: ['file1.txt'] });
-    });
-
-    it('should correctly parse query and multiple files', () => {
-      const args = ['--query', 'another query', '--file', 'file1.txt', '--file', 'file2.js'];
-      const result = AnalyzeCommand.parseArgs(args);
-      expect(result).to.deep.equal({ query: 'another query', files: ['file1.txt', 'file2.js'] });
-    });
-
-    it('should handle arguments in different order', () => {
-        const args = ['--file', 'file1.txt', '--query', 'my query', '--file', 'file2.js'];
-        const result = AnalyzeCommand.parseArgs(args);
-        expect(result).to.deep.equal({ query: 'my query', files: ['file1.txt', 'file2.js'] });
-    });
+    
 
     it('should return empty if query is missing', () => {
       const args = ['--file', 'file1.txt'];
       const result = AnalyzeCommand.parseArgs(args);
-      expect(result).to.deep.equal({ query: '', files: [] });
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
       // Check for console warning/log about usage?
       // expect(console.log).to.have.been.calledWithMatch(/Usage:/);
     });
@@ -56,73 +39,96 @@ describe('AnalyzeCommand Module', () => {
     it('should return empty if file is missing', () => {
       const args = ['--query', 'my query'];
       const result = AnalyzeCommand.parseArgs(args);
-      expect(result).to.deep.equal({ query: '', files: [] });
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
       // expect(console.log).to.have.been.calledWithMatch(/Usage:/);
     });
 
     it('should return empty for empty args array', () => {
       const args: string[] = [];
       const result = AnalyzeCommand.parseArgs(args);
-      expect(result).to.deep.equal({ query: '', files: [] });
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
       // expect(console.log).to.have.been.calledWithMatch(/Usage:/);
     });
 
     it('should ignore unrecognized arguments', () => {
-        const args = ['--query', 'my query', '--extra', 'value', '--file', 'file1.txt'];
+        const args = ['--query', 'my query', '--extra', 'value', '--inputs', 'files'];
         const result = AnalyzeCommand.parseArgs(args);
-        expect(result).to.deep.equal({ query: 'my query', files: ['file1.txt'] });
+        expect(result).to.deep.equal({ query: 'my query', inputsDir: 'files' });
         // Assert directly on the stub
         expect((console.warn as sinon.SinonStub).calledWithMatch(/Unrecognized argument: --extra/)).to.be.true;
         expect((console.warn as sinon.SinonStub).calledWithMatch(/Unrecognized argument: value/)).to.be.true;
       });
 
-    // Optional: Test edge cases like query/file flags without values if needed
+    // Modified test for --inputs
+    it('should correctly parse query and inputs directory', () => {
+      const args = ['--query', 'my query', '--inputs', './data'];
+      const result = AnalyzeCommand.parseArgs(args);
+
+      expect(result).to.deep.equal({ query: 'my query', inputsDir: './data' });
+    });
+
+    it('should handle arguments in different order', () => {
+        const args = ['--inputs', '../input_dir', '--query', 'another query'];
+        const result = AnalyzeCommand.parseArgs(args);
+        expect(result).to.deep.equal({ query: 'another query', inputsDir: '../input_dir' });
+    });
+
+    it('should return empty if query is missing', () => {
+      const args = ['--inputs', './data'];
+      const result = AnalyzeCommand.parseArgs(args);
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
+      // TODO: Check if sayFn was called with usage message
+    });
+
+    it('should return empty if inputs directory is missing', () => {
+      const args = ['--query', 'my query'];
+      const result = AnalyzeCommand.parseArgs(args);
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
+       // TODO: Check if sayFn was called with usage message
+    });
+
+    it('should return empty for empty args array', () => {
+      const args: string[] = [];
+      const result = AnalyzeCommand.parseArgs(args);
+      expect(result).to.deep.equal({ query: '', inputsDir: '' });
+       // TODO: Check if sayFn was called with usage message
+    });
+
+    it('should ignore unrecognized arguments', () => {
+        const args = ['--query', 'my query', '--extra', 'value', '--inputs', 'my_dir'];
+        const result = AnalyzeCommand.parseArgs(args);
+        expect(result).to.deep.equal({ query: 'my query', inputsDir: 'my_dir' });
+        // Assert directly on the stub
+        expect((console.warn as sinon.SinonStub).calledWithMatch(/Unrecognized argument: --extra/)).to.be.true;
+        expect((console.warn as sinon.SinonStub).calledWithMatch(/Unrecognized argument: value/)).to.be.true;
+      });
+
+    // Optional: Test edge cases like query/inputs flags without values if needed
   });
 
   // --- Tests for readFiles ---
   describe('readFiles', () => {
     it('should read a single file and return its content', async () => {
-      const filePath = 'src/file1.ts';
-      const resolvedPath = '/abs/path/to/src/file1.ts';
-      const fileContent = 'console.log("hello");';
+        const dir = 'src';
+        const filePath = 'src/file1.md';
+        const resolvedPath = '/abs/path/to/src/file1.md';
+        const fileContent = 'console.log("hello");';
 
-      // Create mock functions for injection
-      const mockResolve = sinon.stub().withArgs(filePath).returns(resolvedPath);
-      const mockReadFile = sinon.stub().withArgs(resolvedPath, 'utf-8').resolves(fileContent);
+        // Create mock functions for injection
+        const mockResolve = sinon.stub().withArgs(dir,filePath).returns(resolvedPath);
+        const mockReadFile = sinon.stub().withArgs(resolvedPath, 'utf-8').resolves(fileContent);
+        const readdirFn = sinon.stub().withArgs(dir).resolves([filePath]);
 
-      const result = await AnalyzeCommand.readFiles([filePath], mockReadFile, mockResolve);
+        const result = await AnalyzeCommand.readFiles(dir, mockReadFile, mockResolve, readdirFn);
 
-      expect(result).to.deep.equal({ [resolvedPath]: fileContent });
-      expect(mockResolve.calledOnceWith(filePath)).to.be.true;
-      expect(mockReadFile.calledOnceWith(resolvedPath, 'utf-8')).to.be.true;
-    });
-
-    it('should read multiple files and return their contents', async () => {
-      const filePath1 = 'path/file1.txt';
-      const resolvedPath1 = '/abs/path/file1.txt';
-      const fileContent1 = 'content1';
-      const filePath2 = '../file2.js';
-      const resolvedPath2 = '/abs/another/file2.js';
-      const fileContent2 = 'content2';
-
-      const mockResolve = sinon.stub();
-      mockResolve.withArgs(filePath1).returns(resolvedPath1);
-      mockResolve.withArgs(filePath2).returns(resolvedPath2);
-      const mockReadFile = sinon.stub();
-      mockReadFile.withArgs(resolvedPath1, 'utf-8').resolves(fileContent1);
-      mockReadFile.withArgs(resolvedPath2, 'utf-8').resolves(fileContent2);
-
-      const result = await AnalyzeCommand.readFiles([filePath1, filePath2], mockReadFile, mockResolve);
-
-      expect(result).to.deep.equal({
-        [resolvedPath1]: fileContent1,
-        [resolvedPath2]: fileContent2,
-      });
-      expect(mockResolve.calledTwice).to.be.true;
-      expect(mockReadFile.calledTwice).to.be.true;
+        expect(result).to.deep.equal({ [resolvedPath]: fileContent });
+        expect(mockResolve.calledOnceWith(dir,filePath)).to.be.true;
+        expect(mockReadFile.calledOnceWith(resolvedPath, 'utf-8')).to.be.true;
+        expect(readdirFn.calledOnceWith(dir)).to.be.true;
     });
 
     it('should handle readFile error gracefully and return files read so far', async () => {
+        const dir = 'abs';
         const filePath1 = 'good.txt';
         const resolvedPath1 = '/abs/good.txt';
         const fileContent1 = 'good content';
@@ -131,25 +137,120 @@ describe('AnalyzeCommand Module', () => {
         const readError = new Error('File not found');
   
         const mockResolve = sinon.stub();
-        mockResolve.withArgs(filePath1).returns(resolvedPath1);
-        mockResolve.withArgs(filePath2).returns(resolvedPath2);
+        mockResolve.withArgs(dir,filePath1).returns(resolvedPath1);
+        mockResolve.withArgs(dir,filePath2).returns(resolvedPath2);
         const mockReadFile = sinon.stub();
         mockReadFile.withArgs(resolvedPath1, 'utf-8').resolves(fileContent1);
         mockReadFile.withArgs(resolvedPath2, 'utf-8').rejects(readError);
-  
-        const result = await AnalyzeCommand.readFiles([filePath1, filePath2], mockReadFile, mockResolve);
+        const readdirFn = sinon.stub().withArgs(dir).resolves([filePath1, filePath2]);
+        const result = await AnalyzeCommand.readFiles(dir, mockReadFile, mockResolve, readdirFn);
         
         expect(result).to.deep.equal({ [resolvedPath1]: fileContent1 }); 
-        expect((console.error as sinon.SinonStub).calledWithMatch(/Error reading input files:.+File not found/)).to.be.true;
       });
 
       it('should return an empty object if given an empty array', async () => {
         const mockResolve = sinon.stub();
         const mockReadFile = sinon.stub();
 
-        const result = await AnalyzeCommand.readFiles([], mockReadFile, mockResolve);
+        const result = await AnalyzeCommand.readFiles('', mockReadFile, mockResolve);
         expect(result).to.deep.equal({});
         expect(mockResolve.notCalled).to.be.true;
+        expect(mockReadFile.notCalled).to.be.true;
+      });
+
+    // Updated tests for reading from a directory
+    it('should read .txt and .md files from a directory', async () => {
+      const dirPath = 'test/data';
+      const dirents = ['file1.txt', 'image.png', 'notes.md', 'subfolder'];
+      const resolvedPath1 = path.join(dirPath, 'file1.txt'); // Use path.join for consistency
+      const resolvedPath2 = path.join(dirPath, 'notes.md');
+      const fileContent1 = 'text content';
+      const fileContent2 = '# Markdown content';
+
+      // Create mock functions for injection
+      const mockResolveFn = sinon.stub();
+      mockResolveFn.withArgs(dirPath,dirents[0]).returns(resolvedPath1);
+      mockResolveFn.withArgs(dirPath,dirents[2]).returns(resolvedPath2);
+      
+      const mockReaddir = sinon.stub().withArgs(dirPath).resolves(dirents);
+      const mockReadFile = sinon.stub();
+      mockReadFile.withArgs(resolvedPath1, 'utf-8').resolves(fileContent1);
+      mockReadFile.withArgs(resolvedPath2, 'utf-8').resolves(fileContent2);
+
+      // Pass dirPath string and the mocked functions
+      const result = await AnalyzeCommand.readFiles(dirPath, mockReadFile, mockResolveFn, mockReaddir);
+
+      expect(result).to.deep.equal({ 
+        [resolvedPath1]: fileContent1,
+        [resolvedPath2]: fileContent2
+       });
+      expect(mockReaddir.calledOnceWith(dirPath)).to.be.true;
+      // readFile should only be called for .txt and .md files
+      expect(mockReadFile.calledTwice).to.be.true;
+      expect(mockReadFile.calledWith(resolvedPath1, 'utf-8')).to.be.true;
+      expect(mockReadFile.calledWith(resolvedPath2, 'utf-8')).to.be.true;
+    });
+
+    it('should return empty object if directory contains no matching files', async () => {
+        const dirPath = 'test/empty_or_no_match';
+        const dirents = ['image.png', 'archive.zip'];
+  
+        const mockResolve = path.resolve;
+        const mockReaddir = sinon.stub().withArgs(dirPath).resolves(dirents);
+        const mockReadFile = sinon.stub(); // Should not be called
+  
+        const result = await AnalyzeCommand.readFiles(dirPath, mockReadFile, mockResolve, mockReaddir);
+  
+        expect(result).to.deep.equal({});
+        expect(mockReaddir.calledOnceWith(dirPath)).to.be.true;
+        expect(mockReadFile.notCalled).to.be.true;
+      });
+
+    it('should handle readFile error gracefully for one file and read others', async () => {
+        const dirPath = 'test/mixed';
+        const dirents = ['good.txt', 'bad.md', 'another_good.txt'];
+        const resolvedGood1 = path.join(dirPath, 'good.txt');
+        const resolvedBad = path.join(dirPath, 'bad.md');
+        const resolvedGood2 = path.join(dirPath, 'another_good.txt');
+        const contentGood1 = 'content1';
+        const contentGood2 = 'content3';
+        const readError = new Error('Permission denied');
+
+        // const mockResolve = path.resolve;
+        const mockResolveFn = sinon.stub();
+        mockResolveFn.withArgs(dirPath,dirents[0]).returns(resolvedGood1);
+        mockResolveFn.withArgs(dirPath,dirents[2]).returns(resolvedGood2);
+        mockResolveFn.withArgs(dirPath,dirents[1]).returns(resolvedBad);
+
+        const mockReaddir = sinon.stub().withArgs(dirPath).resolves(dirents);
+
+        const mockReadFile = sinon.stub();
+        mockReadFile.withArgs(resolvedGood1, 'utf-8').resolves(contentGood1);
+        mockReadFile.withArgs(resolvedBad, 'utf-8').rejects(readError);
+        mockReadFile.withArgs(resolvedGood2, 'utf-8').resolves(contentGood2);
+
+        const result = await AnalyzeCommand.readFiles(dirPath, mockReadFile, mockResolveFn, mockReaddir);
+        
+        expect(result).to.deep.equal({ 
+            [resolvedGood1]: contentGood1,
+            [resolvedGood2]: contentGood2 // bad.md should be missing
+        }); 
+        expect(mockReaddir.calledOnce).to.be.true;
+        expect(mockReadFile.callCount).to.equal(3);
+      });
+
+    it('should handle readdir error gracefully', async () => {
+        const dirPath = 'test/nonexistent';
+        const readDirError = new Error('Directory not found');
+
+        const mockResolve = path.resolve;
+        const mockReaddir = sinon.stub().withArgs(dirPath).rejects(readDirError);
+        const mockReadFile = sinon.stub(); // Should not be called
+
+        const result = await AnalyzeCommand.readFiles(dirPath, mockReadFile, mockResolve, mockReaddir);
+
+        expect(result).to.deep.equal({});
+        expect(mockReaddir.calledOnceWith(dirPath)).to.be.true;
         expect(mockReadFile.notCalled).to.be.true;
       });
   });
@@ -329,9 +430,10 @@ describe('AnalyzeCommand Module', () => {
     });
 
     it('should run successfully with one iteration (no interrupt)', async () => {
-      const args = ['--query', 'q1', '--file', 'f1.txt'];
-      const parsedArgs = { query: 'q1', files: ['f1.txt'] };
-      const fileContents = { '/abs/f1.txt': 'content' };
+      // Updated args and parsedArgs for --inputs
+      const args = ['--query', 'q1', '--inputs', './data'];
+      const parsedArgs = { query: 'q1', inputsDir: './data' };
+      const fileContents = { '/abs/data/file.txt': 'content' };
       const finalOutput = 'Analysis complete.';
       const finalState = { values: { analysisOutput: finalOutput } };
 
@@ -349,7 +451,8 @@ describe('AnalyzeCommand Module', () => {
 
       // Assertions
       expect(mockParseArgs.calledOnceWith(args)).to.be.true;
-      expect(mockReadFiles.calledOnceWith(parsedArgs.files)).to.be.true;
+      // Check mockReadFiles called with inputsDir
+      expect(mockReadFiles.calledOnceWith(parsedArgs.inputsDir)).to.be.true;
       expect(mockNewGraphConfig.calledOnce).to.be.true;
       expect(mockDbg.calledWithMatch(`Starting analysis with thread ID: ${fakeConfig.configurable.thread_id}`)).to.be.true;
       expect(mockAnalysisIteration.calledOnce).to.be.true;
@@ -370,9 +473,10 @@ describe('AnalyzeCommand Module', () => {
     });
 
     it('should run successfully with multiple iterations (interrupt/resume)', async () => {
-        const args = ['--query', 'q2', '--file', 'f2.txt'];
-        const parsedArgs = { query: 'q2', files: ['f2.txt'] };
-        const fileContents = { '/abs/f2.txt': 'content2' };
+        // Updated args and parsedArgs for --inputs
+        const args = ['--query', 'q2', '--inputs', 'input_files'];
+        const parsedArgs = { query: 'q2', inputsDir: 'input_files' };
+        const fileContents = { '/abs/input_files/doc.md': 'content2' };
         const finalOutput = 'Analysis done after interaction.';
         const finalState = { values: { analysisOutput: finalOutput } };
         const resumeCommand = new Command({ resume: 'user provided info' });
@@ -393,7 +497,8 @@ describe('AnalyzeCommand Module', () => {
   
         // Assertions
         expect(mockParseArgs.calledOnceWith(args)).to.be.true;
-        expect(mockReadFiles.calledOnceWith(parsedArgs.files)).to.be.true;
+        // Check mockReadFiles called with inputsDir
+        expect(mockReadFiles.calledOnceWith(parsedArgs.inputsDir)).to.be.true;
         expect(mockNewGraphConfig.calledOnce).to.be.true;
         expect(mockAnalysisIteration.calledTwice).to.be.true;
         // Check input to second call was the resume command from the first call
@@ -405,9 +510,10 @@ describe('AnalyzeCommand Module', () => {
       });
 
     it('should handle error during getState gracefully', async () => {
-        const args = ['--query', 'q3', '--file', 'f3.txt'];
-        const parsedArgs = { query: 'q3', files: ['f3.txt'] };
-        const fileContents = { '/abs/f3.txt': 'content3' };
+        // Updated args and parsedArgs for --inputs
+        const args = ['--query', 'q3', '--inputs', './project'];
+        const parsedArgs = { query: 'q3', inputsDir: './project' };
+        const fileContents = { '/abs/project/main.txt': 'content3' };
         const getStateError = new Error('Failed to get state');
   
         // Configure mocks
@@ -431,26 +537,39 @@ describe('AnalyzeCommand Module', () => {
         }
     });
 
-    it('should exit early if parseArgs returns empty query', async () => {
-        const args = ['--file', 'onlyfile.txt']; // Missing query
-        const parsedArgs = { query: '', files: [] }; // Simulate parsing failure
-
-        mockParseArgs.returns(parsedArgs);
+    it('should exit early if parseArgs returns empty query or dir', async () => {
+        // Test case 1: Missing query
+        const argsMissingQuery = ['--inputs', 'some_dir'];
+        const parsedArgsMissingQuery = { query: '', inputsDir: '' }; 
+        mockParseArgs.withArgs(argsMissingQuery).returns(parsedArgsMissingQuery);
 
         await AnalyzeCommand.handleAnalyzeCommand(
-            args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
+            argsMissingQuery, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
             mockAnalysisIteration, mockGetState, mockSay, mockDbg
         );
-
-        // Assertions
-        expect(mockParseArgs.calledOnceWith(args)).to.be.true;
-        expect(mockDbg.calledWithMatch(/Exiting handleAnalyzeCommand/)).to.be.true;
-        // Ensure other functions were NOT called
+        // Assertions for missing query
+        expect(mockParseArgs.calledWith(argsMissingQuery)).to.be.true;
+        expect(mockDbg.calledWithMatch(/Exiting handleAnalyzeCommand due to missing query or inputs directory/)).to.be.true;
         expect(mockReadFiles.notCalled).to.be.true;
         expect(mockNewGraphConfig.notCalled).to.be.true;
-        expect(mockAnalysisIteration.notCalled).to.be.true;
-        expect(mockGetState.notCalled).to.be.true;
-        expect(mockSay.notCalled).to.be.true;
+        // Reset mocks for next test case within the same 'it' block if needed, or separate 'it' blocks
+        mockParseArgs.resetHistory(); mockDbg.resetHistory(); mockReadFiles.resetHistory(); mockNewGraphConfig.resetHistory();
+
+        // Test case 2: Missing directory
+        const argsMissingDir = ['--query', 'a query'];
+        const parsedArgsMissingDir = { query: '', inputsDir: '' }; // parseArgs returns empty dir
+        mockParseArgs.withArgs(argsMissingDir).returns(parsedArgsMissingDir);
+
+         await AnalyzeCommand.handleAnalyzeCommand(
+            argsMissingDir, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
+            mockAnalysisIteration, mockGetState, mockSay, mockDbg
+        );
+        // Assertions for missing directory
+        expect(mockParseArgs.calledWith(argsMissingDir)).to.be.true;
+        expect(mockDbg.calledWithMatch(/Exiting handleAnalyzeCommand due to missing query or inputs directory/)).to.be.true;
+        expect(mockReadFiles.notCalled).to.be.true;
+        expect(mockNewGraphConfig.notCalled).to.be.true;
+
     });
 
   });

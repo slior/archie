@@ -8,8 +8,11 @@ import { app as agentApp, AppState } from "../agents/graph"; // Keep agentApp fo
 
 
 // Define types for the dependency functions
-type ParseArgsFn = (args: string[]) => { query: string, files: string[] };
-type ReadFileFn = (path: string, encoding: string) => Promise<string>;
+type ParsedAnalyzeArgs = { query: string, inputsDir: string };
+
+type ParseArgsFn = (args: string[]) => ParsedAnalyzeArgs;
+type ReadFilesFn = (directoryPath: string) => Promise<Record<string, string>>;
+type BasicReadFileFn = (path: string, encoding: string) => Promise<string>;
 type ResolveFn = (...paths: string[]) => string;
 type RunGraphFn = typeof runGraph;
 type PromptFn = (questions: any[]) => Promise<any>; 
@@ -25,12 +28,13 @@ type AnalysisIterationFn = (
 type NewGraphConfigFn = typeof newGraphConfig;
 type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
 
+
 /**
  * Handles the 'analyze' command by initiating an interactive analysis session with the agent.
  * 
  * This function:
- * 1. Parses the command arguments to extract the query and file paths
- * 2. Reads the contents of the specified files
+ * 1. Parses the command arguments to extract the query and input directory path
+ * 2. Reads the contents of the specified files (.txt, .md) in the directory
  * 3. Initializes the analysis state and configuration
  * 4. Enters an interactive loop where it:
  *    - Runs the agent graph
@@ -43,7 +47,7 @@ type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
  * 
  * Dependencies are injected to allow for testing.
  * 
- * @param args - Array of command line arguments containing --query and --file parameters
+ * @param args - Array of command line arguments containing --query and --inputs parameters
  * @param parseArgsFn 
  * @param readFilesFn 
  * @param newGraphConfigFn 
@@ -57,7 +61,7 @@ export async function handleAnalyzeCommand(
     args: string[],
     // Injected Dependencies
     parseArgsFn: ParseArgsFn = parseArgs,
-    readFilesFn: typeof readFiles = readFiles, // Use typeof for complex signature
+    readFilesFn: ReadFilesFn = readFiles,
     newGraphConfigFn: NewGraphConfigFn = newGraphConfig,
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
     getStateFn: GetStateFn = agentApp.getState, // Inject agentApp.getState
@@ -65,14 +69,14 @@ export async function handleAnalyzeCommand(
     dbgFn: DbgFn = dbg
 ) {
 
-    const { query, files } = parseArgsFn(args);
-    if (!query) { // Exit if parsing failed (returned empty query)
-      dbgFn("Exiting handleAnalyzeCommand due to missing query/files.");
+    const { query, inputsDir } = parseArgsFn(args);
+    if (!query || !inputsDir) { // Exit if parsing failed (returned empty query or dir)
+      dbgFn("Exiting handleAnalyzeCommand due to missing query or inputs directory.");
       return;
     }
     
     // Use the default readFile/resolve embedded within readFilesFn unless overridden
-    const fileContents = await readFilesFn(files);
+    const fileContents = await readFilesFn(inputsDir);
 
     const initialAppState: Partial<AppState> = {
         userInput: `analyze: ${query}`,
@@ -143,51 +147,63 @@ export async function analysisIteration(
 }
 
 export async function readFiles(
-    files: string[],
-    readFileFn: ReadFileFn = fsPromises.readFile as ReadFileFn,
-    resolveFn: ResolveFn = path.resolve
+    directoryPath: string,
+    readFileFn: BasicReadFileFn = fsPromises.readFile as BasicReadFileFn,
+    resolveFn: ResolveFn = path.resolve,
+    readdirFn: (path: string) => Promise<string[]> = fsPromises.readdir
 ): Promise<Record<string, string>> {
     const fileContents: Record<string, string> = {};
     try {
-        for (const filePath of files) {
-            const resolvedPath = resolveFn(filePath);
+        const dirents = await readdirFn(directoryPath);
+        const filesToRead = dirents.filter(
+            (dirent) => dirent.endsWith('.txt') || dirent.endsWith('.md')
+        );
+
+        for (const filename of filesToRead) {
+            const resolvedPath = resolveFn(directoryPath, filename);
             console.log(`Reading file: ${resolvedPath}`);
-            fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
+            try {
+                 fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
+            } catch (readError) {
+                console.error(`Error reading file ${resolvedPath}:`, readError);
+                // Decide if one error should stop the whole process or just skip the file
+            }
         }
     } catch (error) {
-        console.error(`Error reading input files: ${error}`);
+        console.error(`Error reading input directory ${directoryPath}:`, error);
+        // Potentially rethrow or handle differently
     }
     finally {
         return fileContents;
     }
 }
 
-export function parseArgs(args: string[], sayFn: SayFn = say): { query: string, files: string[] }
+export function parseArgs(args: string[], sayFn: SayFn = say): ParsedAnalyzeArgs
 {
     let q = '';
-    let files: string[] = [];
+    let dir = ''; // Renamed variable
     try {
         for (let i = 0; i < args.length; i++) {
             if (args[i] === '--query' && i + 1 < args.length) {
                 q = args[i + 1];
                 i++;
-            } else if (args[i] === '--file' && i + 1 < args.length) {
-                files.push(args[i + 1]);
+            } else if (args[i] === '--inputs' && i + 1 < args.length) {
+                dir = args[i + 1];
                 i++;
             } else {
                 console.warn(`Unrecognized argument: ${args[i]}`);
             }
         }
-        if (!q || files.length === 0) {
-            sayFn("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-            return { query: '', files: [] }; // Exit handler
+        if (!q || !dir) {
+            sayFn("Usage: analyze --query \"<your query>\" --inputs <directory_path>");
+            return { query: '', inputsDir: '' }; // Exit handler
         }
     } catch (e) {
         sayFn("Error parsing arguments for analyze command.");
-        sayFn("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
-        return { query: '', files: [] };
+        sayFn("Usage: analyze --query \"<your query>\" --inputs <directory_path>");
+        return { query: '', inputsDir: '' };
     }
-    return { query: q, files: files };
+    return { query: q, inputsDir: dir }; // Return inputsDir
 }
 
 export async function runGraph(currentInput: Input, config: any) : Promise<{interrupted: boolean, agentQuery: string}>
