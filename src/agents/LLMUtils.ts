@@ -5,20 +5,22 @@ import { dbg } from "../cli/shell";
 // Load environment variables
 dotenv.config();
 
-const DEFAULT_MODEL = 'gpt-3.5-turbo';
+export const DEFAULT_MODEL = 'gpt-3.5-turbo';
 
 /**
  * Calls the OpenAI Chat Completions API.
  * 
  * @param history The conversation history.
  * @param prompt The specific user prompt/instruction for this turn.
+ * @param modelName Optional model name to override the default.
  * @returns The content of the LLM's response.
  * @throws Error if API key is missing, API call fails, or response is empty.
  */
 export async function callOpenAI(
     // Use only roles compatible with AppState definition
     history: Array<{ role: "user" | "agent"; content: string }>, 
-    prompt: string
+    prompt: string,
+    modelName?: string
 ): Promise<string> {
     const apiKey = process.env.OPENAI_API_KEY;
 
@@ -44,10 +46,13 @@ export async function callOpenAI(
     ];
 
     try {
+        // Determine effective model and log it
+        const effectiveModel = modelName && modelName.trim() !== '' ? modelName : DEFAULT_MODEL;
         dbg('\n--- Calling OpenAI API ---');
-        // console.debug('Messages:', JSON.stringify(messages, null, 2)); // Optional detailed logging
+        dbg(`Using model for API call: ${effectiveModel}`);
+        
         const completion = await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+            model: effectiveModel,
             messages: messages,
             temperature: 0.7, 
             max_tokens: 1500, 

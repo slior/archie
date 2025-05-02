@@ -456,9 +456,15 @@ describe('AnalyzeCommand Module', () => {
       mockGetState.resolves(finalState);
 
       await AnalyzeCommand.handleAnalyzeCommand(
-        args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-        mockAnalysisIteration, mockGetState, mockSay, mockDbg,
-
+        args, 
+        'test-model',
+        mockParseArgs, 
+        mockReadFiles, 
+        mockNewGraphConfig, 
+        mockAnalysisIteration, 
+        mockGetState, 
+        mockSay, 
+        mockDbg,
         mockGetFinalOutput,
         mockDisplayFinalOutput,
         mockPersistFinalOutput
@@ -479,6 +485,7 @@ describe('AnalyzeCommand Module', () => {
         analysisOutput: "",
         currentAnalysisQuery: "",
         response: "",
+        modelName: "test-model",
       };
       expect(mockAnalysisIteration.firstCall.args[0]).to.deep.equal(expectedInitialInput);
       expect(mockAnalysisIteration.firstCall.args[1]).to.equal(fakeConfig);
@@ -510,9 +517,15 @@ describe('AnalyzeCommand Module', () => {
         mockPersistFinalOutput.resolves();
         mockGetState.resolves(finalState);
         await AnalyzeCommand.handleAnalyzeCommand(
-          args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-          mockAnalysisIteration, mockGetState, mockSay, mockDbg,
-
+          args, 
+          'test-model',
+          mockParseArgs, 
+          mockReadFiles, 
+          mockNewGraphConfig, 
+          mockAnalysisIteration, 
+          mockGetState, 
+          mockSay, 
+          mockDbg,
           mockGetFinalOutput,
           mockDisplayFinalOutput,
           mockPersistFinalOutput
@@ -551,9 +564,15 @@ describe('AnalyzeCommand Module', () => {
   
         try {
             await AnalyzeCommand.handleAnalyzeCommand(
-                args, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-                mockAnalysisIteration, mockGetState, mockSay, mockDbg,
-                // Pass local stubs
+                args, 
+                'test-model',
+                mockParseArgs, 
+                mockReadFiles, 
+                mockNewGraphConfig, 
+                mockAnalysisIteration, 
+                mockGetState, 
+                mockSay, 
+                mockDbg,
                 mockGetFinalOutput,
                 mockDisplayFinalOutput,
                 mockPersistFinalOutput
@@ -573,9 +592,18 @@ describe('AnalyzeCommand Module', () => {
         mockParseArgs.withArgs(argsMissingQuery).returns(parsedArgsMissingQuery);
 
         await AnalyzeCommand.handleAnalyzeCommand(
-            argsMissingQuery, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-            mockAnalysisIteration, mockGetState, mockSay, mockDbg,
-            // No need to pass output mocks here as it exits early
+            argsMissingQuery, 
+            'test-model',
+            mockParseArgs, 
+            mockReadFiles, 
+            mockNewGraphConfig, 
+            mockAnalysisIteration, 
+            mockGetState, 
+            mockSay, 
+            mockDbg,
+            mockGetFinalOutput,
+            mockDisplayFinalOutput,
+            mockPersistFinalOutput
         );
         // Assertions for missing query
         expect(mockParseArgs.calledWith(argsMissingQuery)).to.be.true;
@@ -591,9 +619,18 @@ describe('AnalyzeCommand Module', () => {
         mockParseArgs.withArgs(argsMissingDir).returns(parsedArgsMissingDir);
 
          await AnalyzeCommand.handleAnalyzeCommand(
-            argsMissingDir, mockParseArgs, mockReadFiles, mockNewGraphConfig, 
-            mockAnalysisIteration, mockGetState, mockSay, mockDbg,
-            // No need to pass output mocks here as it exits early
+            argsMissingDir, 
+            'test-model',
+            mockParseArgs, 
+            mockReadFiles, 
+            mockNewGraphConfig, 
+            mockAnalysisIteration, 
+            mockGetState, 
+            mockSay, 
+            mockDbg,
+            mockGetFinalOutput,
+            mockDisplayFinalOutput,
+            mockPersistFinalOutput
         );
         // Assertions for missing directory
         expect(mockParseArgs.calledWith(argsMissingDir)).to.be.true;

@@ -37,9 +37,10 @@ export function newGraphConfig()
  * it makes one call and returns the response.
  * 
  * @param commandInput - The raw command string entered by the user
+ * @param modelName - The model name selected at startup
  * @throws Error if the agent graph fails to execute or is not available
  */
-async function handleDefaultCommand(commandInput: string) {
+export async function handleDefaultCommand(commandInput: string, modelName: string) {
     if (!agentApp) {
         dbg("Error: Agent graph is not compiled or available.");
         return;
@@ -47,13 +48,14 @@ async function handleDefaultCommand(commandInput: string) {
     try {
         dbg(`Invoking agent graph with input: "${commandInput}"`);
         // Define the initial state for this invocation, including defaults for new fields
-        const initialState: Input = {
+        const initialState: Partial<AppState> = {
             userInput: commandInput,
             response: "", // Start with an empty response
             fileContents: {},
             analysisHistory: [],
             analysisOutput: "",
             currentAnalysisQuery: "",
+            modelName: modelName,
         };
         const config = newGraphConfig();
         // Invoke the graph - Cast needed as invoke expects full state usually
@@ -117,9 +119,10 @@ export function parseCommand(commandInput: string) : {command: string, args: str
  * - Any other input is treated as a message for the default agent handler
  * 
  * @param memoryService - Service for persisting agent memory state between sessions
+ * @param modelName - The model name selected at startup
  * @returns Promise that resolves when the shell is exited
  */
-export async function startShell(memoryService: MemoryService) {
+export async function startShell(memoryService: MemoryService, modelName: string) {
   console.log('Starting interactive shell. Type "exit" to quit.');
   console.log('Available commands: exit, analyze --query "...\" --inputs <path> ..., or provide input for default agent.');
 
@@ -138,11 +141,11 @@ export async function startShell(memoryService: MemoryService) {
             shellRunning = false;
             break;
         case ANALYZE_COMMAND:
-            await handleAnalyzeCommand(args);
+            await handleAnalyzeCommand(args, modelName);
             break;
         default:
             // Treat the entire input as input for the default command handler
-            await handleDefaultCommand(commandInput);
+            await handleDefaultCommand(commandInput, modelName);
             break;
     }
   }

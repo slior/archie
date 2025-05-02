@@ -18,17 +18,18 @@ sequenceDiagram
     participant AgentGraph
     participant inquirer as Inquirer
     
-    User->>Terminal: node dist/main.js [--memory-file <path>]
+    User->>Terminal: node dist/main.js [--memory-file <path>] [--model <name>]
     Terminal->>Main: Executes main()
     Main->>dotenv: config() Loads .env
     Main->>Commander: Instantiates Command()
-    Main->>Commander: Defines version, description, options (--memory-file)
+    Main->>Commander: Defines version, description, options (--memory-file, --model)
     Main->>Commander: parse(process.argv)
-    Commander-->>Main: Returns parsed options
+    Commander-->>Main: Returns parsed options (memoryFile, model)
+    Main->>Terminal: Logs "Using model: ..."
     Main->>Memory: Instantiates MemoryService()
     Main->>Memory: loadMemory(filePath)
     Memory-->>Main: Memory loaded
-    Main->>Shell: startShell(memoryService)
+    Main->>Shell: startShell(memoryService, modelName)
     Shell->>Shell: getCommandInput() waits...
     Shell->>Inquirer: prompt([{ type: 'input', ... }])
     Inquirer->>User: Displays "archie>" prompt
@@ -44,13 +45,13 @@ sequenceDiagram
         Main->>Terminal: Logs "Shell exited..."
         Main->>Terminal: Process ends
     else command == "analyze"
-        Shell->>AnalyzeCmd: handleAnalyzeCommand(args)
+        Shell->>AnalyzeCmd: handleAnalyzeCommand(args, modelName)
         Note over AnalyzeCmd, AgentGraph: Executes analysis flow (using --inputs, see analyze_flow.md)
         AnalyzeCmd-->>Shell: Returns control
         Shell->>Shell: getCommandInput() waits... // Loop continues
     else // Default command
-        Shell->>Shell: handleDefaultCommand(input)
-        Shell->>AgentGraph: invoke({ userInput: input, ... })
+        Shell->>Shell: handleDefaultCommand(input, modelName)
+        Shell->>AgentGraph: invoke({ userInput: input, modelName: modelName, ... })
         AgentGraph-->>Shell: Returns final state
         Shell->>User: Displays Agent Response
         Shell->>Shell: getCommandInput() waits... // Loop continues
@@ -61,7 +62,7 @@ sequenceDiagram
 
 1.  **Execution Start:**
     *   The user executes the compiled JavaScript entry point from the terminal, typically `node dist/main.js`.
-    *   Optional command-line arguments, like `--memory-file <path>`, can be provided.
+    *   Optional command-line arguments, like `--memory-file <path>` and `--model <name>`, can be provided.
     *   Relevant Code: Execution in Terminal.
 
 2.  **Initialization (`src/main.ts`):**
@@ -71,9 +72,11 @@ sequenceDiagram
 
 3.  **Command-Line Argument Parsing (`src/main.ts`):**
     *   An instance of `Command` from the `commander` library is created.
-    *   Application metadata (version, description) and command-line options (specifically `--memory-file`) are defined using the `commander` API.
+    *   Application metadata (version, description) and command-line options (specifically `--memory-file` and `--model`) are defined using the `commander` API.
     *   `program.parse(process.argv)` processes the arguments provided by the user in the terminal.
     *   The resolved path for the memory file is determined, defaulting to `./memory.json` if the option isn't provided.
+    *   The specified `modelName` is retrieved (or the default is used).
+    *   The application logs the model being used (`Using model: ...`).
     *   Relevant Code: [`main.ts L15-L26`](../src/main.ts#L15-L26)
 
 4.  **Memory Service Instantiation and Loading (`src/main.ts`):**
@@ -82,7 +85,7 @@ sequenceDiagram
     *   Relevant Code: [`main.ts L12`](../src/main.ts#L12), [`main.ts L29-L30`](../src/main.ts#L29-L30)
 
 5.  **Starting the Interactive Shell (`src/main.ts` -> `src/cli/shell.ts`):**
-    *   The `startShell(memoryService)` function from [`src/cli/shell.ts`](../src/cli/shell.ts) is called asynchronously, passing the initialized `MemoryService` instance.
+    *   The `startShell(memoryService, modelName)` function from [`src/cli/shell.ts`](../src/cli/shell.ts) is called asynchronously, passing the initialized `MemoryService` instance and the selected `modelName`.
     *   Relevant Code: [`main.ts L33`](../src/main.ts#L33)
 
 6.  **Shell Loop (`src/cli/shell.ts`):**
@@ -95,8 +98,8 @@ sequenceDiagram
     *   `parseCommand(commandInput)` is called to split the raw string into a lowercase `command` and an array of `args` (handling quoted arguments).
     *   A `switch` statement directs execution based on the `command`:
         *   **`exit`:** Saves memory via `memoryService.saveMemory()`, logs messages, and breaks the loop, causing `startShell` to return.
-        *   **`analyze`:** Calls `handleAnalyzeCommand(args)` from `src/cli/AnalyzeCommand.ts`, delegating the entire analysis workflow (which now uses `--inputs <directory>` instead of `--file`). Control returns to the shell loop after `handleAnalyzeCommand` completes.
-        *   **Default:** For any other command, `handleDefaultCommand(commandInput)` is called. This function prepares a basic initial state and calls `agentApp.invoke()` for a single, non-interactive graph execution, displaying the result.
+        *   **`analyze`:** Calls `handleAnalyzeCommand(args, modelName)` from `src/cli/AnalyzeCommand.ts`, passing the arguments and the selected model name. This delegates the entire analysis workflow. Control returns to the shell loop after `handleAnalyzeCommand` completes.
+        *   **Default:** For any other command, `handleDefaultCommand(commandInput, modelName)` is called. This function prepares a basic initial state (including `userInput` and `modelName`) and calls `agentApp.invoke()` for a single, non-interactive graph execution, displaying the result.
     *   The shell loop continues, prompting for the next command unless `exit` was entered.
     *   Relevant Code: [`shell.ts`](../src/cli/shell.ts) (main loop, `getCommandInput`, `parseCommand`, `switch` statement)
 

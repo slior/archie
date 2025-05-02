@@ -20,18 +20,18 @@ sequenceDiagram
 
     User->>Shell: analyze --query "..." --inputs <dir_path>
     Shell->>Shell: parseCommand(input)
-    Shell->>AnalyzeCommand: handleAnalyzeCommand(args)
+    Shell->>AnalyzeCommand: handleAnalyzeCommand(args, modelName)
     AnalyzeCommand->>AnalyzeCommand: parseArgs(args) -> {query, inputsDir}
     AnalyzeCommand->>AnalyzeCommand: readFiles(inputsDir) -> fileContents
-    AnalyzeCommand->>AnalyzeCommand: Create initial AppState & config (thread_id)
+    AnalyzeCommand->>AnalyzeCommand: Create initial AppState (..., modelName) & config (thread_id)
     AnalyzeCommand->>AnalyzeCommand: Start Execution Loop (while !analysisDone)
     AnalyzeCommand->>AnalyzeCommand: analysisIteration(currentInput, config)
     AnalyzeCommand->>AnalyzeCommand: runGraph(currentInput, config)
-    AnalyzeCommand->>AgentGraph: app.stream(currentInput, config)
+    AnalyzeCommand->>AgentGraph: app.stream(currentInput{..., modelName}, config)
     AgentGraph->>AgentGraph: START -> Evaluate Initial Routing
     Note right of AgentGraph: Based on userInput keywords
     AgentGraph->>AgentGraph: Route -> AnalysisPrepareNode
-    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (construct prompt, callLLM->callOpenAI, prepare query)
+    AgentGraph->>AgentGraph: Run AnalysisPrepareNode (construct prompt, callLLM(..., modelName)->callOpenAI(..., model=effectiveModel), prepare query)
     Note right of AgentGraph: Returns state update (history, query)
     AgentGraph->>Checkpointer: Save State (after Prepare returns)
     AgentGraph->>AgentGraph: Route: AnalysisPrepareNode -> AnalysisInterruptNode
@@ -73,7 +73,7 @@ sequenceDiagram
     AnalyzeCommand->>AnalyzeCommand: runGraph(currentInput, config)
     AnalyzeCommand->>AgentGraph: app.stream(currentInput, config)
     AgentGraph->>AgentGraph: Run AnalysisPrepareNode (processes approval keyword)
-    AgentGraph->>AgentGraph: Calls returnFinalOutput (calls callLLM -> callOpenAI for final summary)
+    AgentGraph->>AgentGraph: Calls returnFinalOutput (calls callLLM('final', modelName) -> callOpenAI(..., model=effectiveModel) for final summary)
     Note right of AgentGraph: Returns state update {analysisOutput: "..."}
     AgentGraph->>Checkpointer: Save State (after Prepare returns)
     AgentGraph->>AgentGraph: Route: AnalysisPrepareNode -> END
@@ -97,13 +97,13 @@ sequenceDiagram
     *   The user types the `analyze` command in the Archie shell (e.g., `analyze --query "Implement feature X" --inputs ./docs/feature_x`).
     *   The `startShell` loop calls `getCommandInput` to read the raw input.
     *   `parseCommand` is called to split the input into the command (`analyze`) and arguments (`args`).
-    *   The `switch` statement detects the `analyze` command and calls `handleAnalyzeCommand(args)` from `src/cli/AnalyzeCommand.ts`.
+    *   The `switch` statement detects the `analyze` command and calls `handleAnalyzeCommand(args, modelName)` from `src/cli/AnalyzeCommand.ts`, passing along the model name selected at startup.
 
 2.  **Preprocessing (`src/cli/AnalyzeCommand.ts`):**
-    *   `handleAnalyzeCommand` calls `parseArgs(args)` to extract the `--query` value and `--inputs` directory path (`inputsDir`).
+    *   `handleAnalyzeCommand` calls `parseArgs(args)` to extract the `--query` value and `--inputs` directory path (`inputsDir`). It receives `modelName` from the shell.
     *   It calls `readFiles(inputsDir)` to read the content of `.txt` and `.md` files within the specified directory into the `fileContents` record.
     *   A unique `thread_id` is generated.
-    *   The initial `AppState` object is created (`userInput`, `fileContents`, empty `analysisHistory`, etc.).
+    *   The initial `AppState` object is created (`userInput`, `fileContents`, `modelName`, empty `analysisHistory`, etc.).
     *   The `config` object containing the `thread_id` is prepared.
 
 3.  **Analysis Execution Loop Start (`handleAnalyzeCommand` in `src/cli/AnalyzeCommand.ts`):**
@@ -126,8 +126,8 @@ sequenceDiagram
 7.  **Analysis Preparation (`src/agents/AnalysisPrepareNode.ts`):**
     *   `analysisPrepareNode` executes.
     *   **Input Handling:** Processes `state.userInput` (initial query or resumed input) and adds it to `analysisHistory`.
-    *   **Approval Check:** Checks `analysisHistory` using `userIsDone` helper for keywords like "SOLUTION APPROVED" or "DONE". If found, calls `returnFinalOutput` and returns the final state update, leading eventually to `END`.
-    *   **Conversational Turn (If not approved):** Determines prompt type (`initial` or `followup`). Calls the abstracted `callLLM` function, passing history, file contents, and prompt type. `callLLM` constructs a detailed prompt and invokes `callOpenAI` (from `LLMUtils.ts`) for the actual API call. Prepares state update (`analysisHistory` including new agent message, `currentAnalysisQuery` with agent's response/question), and returns it.
+    *   **Approval Check:** Checks `analysisHistory` using `userIsDone` helper for keywords like "SOLUTION APPROVED" or "DONE". If found, calls `returnFinalOutput` (passing the `state` including `modelName`) and returns the final state update, leading eventually to `END`.
+    *   **Conversational Turn (If not approved):** Determines prompt type (`initial` or `followup`). Calls the abstracted `callLLM` function, passing history, file contents, prompt type, and the `modelName` from the `state`. `callLLM` constructs a detailed prompt and invokes `callOpenAI` (from `LLMUtils.ts`), passing the `modelName` for the actual API call. Prepares state update (`analysisHistory` including new agent message, `currentAnalysisQuery` with agent's response/question), and returns it.
 
 8.  **Transition to Interrupt (`src/agents/graph.ts` conditional edge):**
     *   The conditional edge after `ANALYSIS_PREPARE` evaluates the returned state.
@@ -167,7 +167,7 @@ sequenceDiagram
 
 14. **Completion (`AnalysisPrepareNode` -> `END` -> `analysisIteration` -> `handleAnalyzeCommand`):**
     *   Eventually, the user provides an approval/done keyword.
-    *   `AnalysisPrepareNode` detects it via `userIsDone`, calls `returnFinalOutput`, which calls `callLLM('final')` to generate the summary. It returns the final state update with `analysisOutput` populated.
+    *   `AnalysisPrepareNode` detects it via `userIsDone`, calls `returnFinalOutput`. `returnFinalOutput` retrieves the `modelName` from the state and calls `callLLM('final', modelName)` to generate the summary using the selected model. It returns the final state update with `analysisOutput` populated.
     *   The conditional edge after `ANALYSIS_PREPARE` routes to `END`.
     *   The `agentApp.stream` call in `runGraph` finishes.
     *   `runGraph` returns `{ interrupted: false, ... }`.

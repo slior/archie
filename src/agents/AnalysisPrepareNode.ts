@@ -51,7 +51,8 @@ function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Rec
 async function callLLM(
     history: HistoryMessage[], 
     files: Record<string, string>,
-    promptType: PromptType
+    promptType: PromptType,
+    modelName: string
 ): Promise<string> {
     
     const constructedPrompt = getPrompt(promptType, history, files);
@@ -59,7 +60,7 @@ async function callLLM(
 
     try {
         // Pass the existing history and the newly constructed prompt instruction
-        return await callOpenAI(history, constructedPrompt);
+        return await callOpenAI(history, constructedPrompt, modelName);
     } catch (error) {
         console.error("Error in callLLM calling callOpenAI:", error);
         // Rethrow a user-friendly error or handle as needed
@@ -74,8 +75,10 @@ async function returnFinalOutput(
 ) : Promise<Partial<AppState>> {
     say("Analysis Agent: Solution approved by user.");
     try {
+        // Item 21: Get modelName from state and pass to callLLM
+        const modelName = state.modelName; 
         // Call the abstracted LLM function for the final summary
-        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL);
+        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL, modelName);
         const finalAgentMsg = { role: 'agent' as const, content: "Okay, generating the final solution description." };
 
         return {
@@ -120,11 +123,13 @@ function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInpu
 
 async function callLLMForNextStep(currentHistory: HistoryMessage[], state: AppState) : Promise<Partial<AppState>> {
     try {
+        // Item 22: Get modelName from state and pass to callLLM
+        const modelName = state.modelName; 
         // Determine prompt type based on history
         // Consider it 'initial' only if history *only* contains the first user message
         const promptType = currentHistory.length <= 1 ? 'initial' : 'followup'; 
         
-        const agentResponse = await callLLM(currentHistory, state.fileContents, promptType);
+        const agentResponse = await callLLM(currentHistory, state.fileContents, promptType, modelName);
         const agentMsg = { role: 'agent' as const, content: agentResponse };
 
         dbg(`Agent response generated: ${agentResponse}`);

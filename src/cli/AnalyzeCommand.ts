@@ -51,6 +51,7 @@ type PersistFinalOutputFn = typeof persistFinalOutput;
  * Dependencies are injected to allow for testing.
  * 
  * @param args - Array of command line arguments containing --query and --inputs parameters
+ * @param modelName - The model name selected at startup
  * @param parseArgsFn 
  * @param readFilesFn 
  * @param newGraphConfigFn 
@@ -65,6 +66,7 @@ type PersistFinalOutputFn = typeof persistFinalOutput;
  */
 export async function handleAnalyzeCommand(
     args: string[],
+    modelName: string,
     // Injected Dependencies
     parseArgsFn: ParseArgsFn = parseArgs,
     readFilesFn: ReadFilesFn = readFiles,
@@ -94,6 +96,7 @@ export async function handleAnalyzeCommand(
         analysisOutput: "",
         currentAnalysisQuery: "",
         response: "", 
+        modelName: modelName,
     };
     const config = newGraphConfigFn();
 

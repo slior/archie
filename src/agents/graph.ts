@@ -22,7 +22,7 @@ export interface AppState {
   analysisHistory: Array<{ role: Role; content: string }>; // Conversation history
   analysisOutput: string; // Final output from analysis agent
   currentAnalysisQuery: string; // Question posed by agent during interrupt
-
+  modelName: string; // Item 17: Add modelName
 }
 
 function shouldTriggerAnalysis(userInput: string): boolean {
@@ -40,6 +40,7 @@ const workflow = new StateGraph<AppState>({
             analysisHistory: { value: (x, y) => (x || []).concat(y || []), default: () => ([]) },       // Append new messages
             analysisOutput: { value: (x, y) => y, default: () => "" },                                  // Takes new output
             currentAnalysisQuery: { value: (x, y) => y, default: () => "" },                            // Takes new query
+            modelName: { value: (x, y) => y ?? x, default: () => "" }, // Item 18: Add channel config
         },
     })
     .addNode(ECHO_AGENT, echoAgentNode)
