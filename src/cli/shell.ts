@@ -85,9 +85,9 @@ export async function getCommandInput() : Promise<string>
  * Parses a command line input string into a command and arguments.
  * 
  * Handles quoted arguments by preserving spaces within quotes and removing the quotes.
- * For example: `analyze --query "my query" --file test.ts` becomes:
+ * For example: `analyze --query "my query" --inputs test.ts` becomes:
  * - command: "analyze"
- * - args: ["--query", "my query", "--file", "test.ts"]
+ * - args: ["--query", "my query", "--inputs", "test.ts"]
  * 
  * @param commandInput - The raw command line input string to parse
  * @returns An object containing:
@@ -113,7 +113,7 @@ export function parseCommand(commandInput: string) : {command: string, args: str
  * 
  * The shell provides a REPL (Read-Eval-Print Loop) interface that accepts the following commands:
  * - 'exit': Saves the memory state and exits the shell
- * - 'analyze --query "..." --file <path>': Runs analysis on specified files with the given query
+ * - 'analyze --query "..." --inputs <path>': Runs analysis on specified files with the given query
  * - Any other input is treated as a message for the default agent handler
  * 
  * @param memoryService - Service for persisting agent memory state between sessions
@@ -121,7 +121,7 @@ export function parseCommand(commandInput: string) : {command: string, args: str
  */
 export async function startShell(memoryService: MemoryService) {
   console.log('Starting interactive shell. Type "exit" to quit.');
-  console.log('Available commands: exit, analyze --query "...\" --file <path> ..., or provide input for default agent.');
+  console.log('Available commands: exit, analyze --query "...\" --inputs <path> ..., or provide input for default agent.');
 
   let shellRunning = true;
   while (shellRunning) {

@@ -7,12 +7,12 @@ import { dbg } from "../cli/shell"; // Corrected import path for dbg
  * captures the user's input and returns it in the state update.
  */
 export async function analysisInterruptNode(state: AppState): Promise<Partial<AppState>> { // Change return type
-    console.log("--- Analysis Interrupt Node Running ---");
+    dbg("--- Analysis Interrupt Node Running ---");
     const queryToAsk = state.currentAnalysisQuery;
     dbg(`Interrupting with query: ${queryToAsk}`);
 
     if (!queryToAsk) {
-        console.warn("AnalysisInterruptNode: No query found in state to ask the user.");
+        dbg("AnalysisInterruptNode: No query found in state to ask the user.");
         return { userInput: "" }; // Return empty input if no query
     }
 

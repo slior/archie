@@ -64,7 +64,7 @@ export async function handleAnalyzeCommand(
     readFilesFn: ReadFilesFn = readFiles,
     newGraphConfigFn: NewGraphConfigFn = newGraphConfig,
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
-    getStateFn: GetStateFn = agentApp.getState, // Inject agentApp.getState
+    getStateFn: GetStateFn = agentApp.getState.bind(agentApp), // Inject agentApp.getState
     sayFn: SayFn = say,
     dbgFn: DbgFn = dbg
 ) {
@@ -105,6 +105,8 @@ export async function handleAnalyzeCommand(
     try
     {
         const finalState = await getStateFn(config);
+        
+        // const finalState = await agentApp.getState(config);
         sayFn("Final Output:");
         sayFn(finalState.values.analysisOutput || "No analysis output generated.");
     } 
