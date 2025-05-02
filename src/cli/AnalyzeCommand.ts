@@ -1,11 +1,29 @@
-
-import { app as agentApp, AppState } from "../agents/graph";
 import { Command } from "@langchain/langgraph";
-import { dbg, say, newGraphConfig, Input } from "./shell";
-import * as fs from 'fs/promises';
+import * as shell from "./shell"; // Import shell namespace for defaults
+import { dbg, say, newGraphConfig, Input, SayFn, DbgFn } from "./shell"; 
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import inquirer from 'inquirer';
+import { app as agentApp, AppState } from "../agents/graph"; // Keep agentApp for getState default
 
+
+// Define types for the dependency functions
+type ParseArgsFn = (args: string[]) => { query: string, files: string[] };
+type ReadFileFn = (path: string, encoding: string) => Promise<string>;
+type ResolveFn = (...paths: string[]) => string;
+type RunGraphFn = typeof runGraph;
+type PromptFn = (questions: any[]) => Promise<any>; 
+type AnalysisIterationFn = (
+    currentInput: Input, 
+    config: any,
+    runGraphFn?: RunGraphFn, // Optional here as they are passed down
+    promptFn?: PromptFn,
+    sayFn?: SayFn,
+    dbgFn?: DbgFn
+) => Promise<{ isDone: boolean, newInput: Input }>;
+
+type NewGraphConfigFn = typeof newGraphConfig;
+type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
 
 /**
  * Handles the 'analyze' command by initiating an interactive analysis session with the agent.
@@ -23,14 +41,38 @@ import inquirer from 'inquirer';
  * The function implements a Human-in-the-Loop pattern where the agent can pause
  * execution to ask clarifying questions before providing the final analysis.
  * 
+ * Dependencies are injected to allow for testing.
+ * 
  * @param args - Array of command line arguments containing --query and --file parameters
+ * @param parseArgsFn 
+ * @param readFilesFn 
+ * @param newGraphConfigFn 
+ * @param analysisIterationFn 
+ * @param getStateFn 
+ * @param sayFn 
+ * @param dbgFn 
  * @throws Error if there are issues accessing the graph state or other runtime errors
  */
-export async function handleAnalyzeCommand(args: string[]) {
+export async function handleAnalyzeCommand(
+    args: string[],
+    // Injected Dependencies
+    parseArgsFn: ParseArgsFn = parseArgs,
+    readFilesFn: typeof readFiles = readFiles, // Use typeof for complex signature
+    newGraphConfigFn: NewGraphConfigFn = newGraphConfig,
+    analysisIterationFn: AnalysisIterationFn = analysisIteration,
+    getStateFn: GetStateFn = agentApp.getState, // Inject agentApp.getState
+    sayFn: SayFn = say,
+    dbgFn: DbgFn = dbg
+) {
 
-    const { query, files } = parseArgs(args);
+    const { query, files } = parseArgsFn(args);
+    if (!query) { // Exit if parsing failed (returned empty query)
+      dbgFn("Exiting handleAnalyzeCommand due to missing query/files.");
+      return;
+    }
     
-    const fileContents = await readFiles(files);
+    // Use the default readFile/resolve embedded within readFilesFn unless overridden
+    const fileContents = await readFilesFn(files);
 
     const initialAppState: Partial<AppState> = {
         userInput: `analyze: ${query}`,
@@ -40,19 +82,17 @@ export async function handleAnalyzeCommand(args: string[]) {
         currentAnalysisQuery: "",
         response: "", 
     };
-    const config = newGraphConfig();
+    const config = newGraphConfigFn();
 
-    dbg(`Starting analysis with thread ID: ${config.configurable.thread_id}`);
+    dbgFn(`Starting analysis with thread ID: ${config.configurable.thread_id}`);
 
-    /*
-        The core of this function is a loop that runs the agent graph,
-        and handles the agent's interrupt requests.
-     */
     let currentInput: Input = initialAppState;
     let analysisDone = false;
     while (!analysisDone)
     {
-        const { isDone, newInput } = await analysisIteration(currentInput, config);
+        // Pass down necessary functions if analysisIterationFn needs them explicitly,
+        // otherwise rely on its defaults (or ensure the injected one is pre-configured)
+        const { isDone, newInput } = await analysisIterationFn(currentInput, config);
         currentInput = newInput;
         analysisDone = isDone;
     }   
@@ -60,58 +100,69 @@ export async function handleAnalyzeCommand(args: string[]) {
     // Final Output
     try
     {
-        const finalState = await agentApp.getState(config);
-        say("Final Output:");
-        say(finalState.values.analysisOutput || "No analysis output generated.");
-    }
-    catch (error)
-    {
+        const finalState = await getStateFn(config);
+        sayFn("Final Output:");
+        sayFn(finalState.values.analysisOutput || "No analysis output generated.");
+    } 
+    catch (error) 
+    { 
         console.error("Error retrieving final graph state:", error);
         throw error;
-    }
+    } 
 }
 
-async function analysisIteration(currentInput: Input, config: any) : Promise<{ isDone: boolean, newInput: Input }>
+export async function analysisIteration(
+    currentInput: Input, 
+    config: any,
+    // Inject dependencies
+    runGraphFn: RunGraphFn = runGraph,
+    promptFn: PromptFn = inquirer.prompt,
+    sayFn: SayFn = shell.say,
+    dbgFn: DbgFn = shell.dbg
+) : Promise<{ isDone: boolean, newInput: Input }>
 {
-    const {interrupted, agentQuery} = await runGraph(currentInput, config);
+    const {interrupted, agentQuery} = await runGraphFn(currentInput, config); 
     let analysisDone = false;
     if (interrupted)
     {
-        say(`\nAgent: ${agentQuery}`);
-        const { userResponse } = await inquirer.prompt([
+        sayFn(`\nAgent: ${agentQuery}`); 
+        const { userResponse } = await promptFn([ 
             { type: 'input', name: 'userResponse', message: 'Your response: ' }
         ]);
 
         currentInput = new Command({  resume: userResponse  });
-        dbg(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`); 
+        dbgFn(`Resuming with Command. currentInput: ${JSON.stringify(currentInput)}`);
 
     }
     else
     {
-        say("\n--- Analysis Complete ---");
+        sayFn("\n--- Analysis Complete ---");
         analysisDone = true;
     }
     return { isDone: analysisDone, newInput: currentInput };
 }
 
-async function readFiles(files: string[]): Promise<Record<string, string>> {
+export async function readFiles(
+    files: string[],
+    readFileFn: ReadFileFn = fsPromises.readFile as ReadFileFn,
+    resolveFn: ResolveFn = path.resolve
+): Promise<Record<string, string>> {
     const fileContents: Record<string, string> = {};
     try {
         for (const filePath of files) {
-            const resolvedPath = path.resolve(filePath);
+            const resolvedPath = resolveFn(filePath);
             console.log(`Reading file: ${resolvedPath}`);
-            fileContents[resolvedPath] = await fs.readFile(resolvedPath, 'utf-8');
+            fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
         }
     } catch (error) {
         console.error(`Error reading input files: ${error}`);
-     
     }
     finally {
         return fileContents;
     }
 }
 
-function parseArgs(args: string[]): { query: string, files: string[] }
+export function parseArgs(args: string[], sayFn: SayFn = say): { query: string, files: string[] }
 {
     let q = '';
     let files: string[] = [];
@@ -128,20 +179,18 @@ function parseArgs(args: string[]): { query: string, files: string[] }
             }
         }
         if (!q || files.length === 0) {
-            console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
+            sayFn("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
             return { query: '', files: [] }; // Exit handler
         }
     } catch (e) {
-        console.log("Error parsing arguments for analyze command.");
-        console.log("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
+        sayFn("Error parsing arguments for analyze command.");
+        sayFn("Usage: analyze --query \"<your query>\" --file <path1> [--file <path2> ...]");
         return { query: '', files: [] };
     }
     return { query: q, files: files };
 }
 
-
-
-async function runGraph(currentInput: Input, config: any) : Promise<{interrupted: boolean, agentQuery: string}>
+export async function runGraph(currentInput: Input, config: any) : Promise<{interrupted: boolean, agentQuery: string}>
 {
     let stream;
     let agentQuery = "";
@@ -158,7 +207,7 @@ async function runGraph(currentInput: Input, config: any) : Promise<{interrupted
                 dbg(`agentQuery: ${agentQuery}`);
                 break; // Exit inner loop to prompt user
             }
-             // You might want to log other node outputs here if needed
+             // Consider logging other node outputs here if needed
              // e.g., if (chunk.supervisor) { console.log("Supervisor output:", chunk.supervisor); }
         }
     } catch (error) {

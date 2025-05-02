@@ -9,6 +9,9 @@ const EXIT_COMMAND = 'exit';
 const ANALYZE_COMMAND = 'analyze';
 
 export type Input = Partial<AppState> | Command;
+export type SayFn = typeof say;
+export type DbgFn = typeof dbg;
+
 
 /**
  * Creates a new configuration object for the agent graph with a unique thread ID.
