@@ -1,8 +1,8 @@
-# Archie: Main Program and Shell Initialization Flow
+# Archie: CLI Command Execution Flow
 
 ## Overview
 
-This document outlines the sequence of events when the Archie application starts, from command-line execution to the launch of the interactive user shell. It details command-line argument parsing, memory loading, and the initiation of the shell loop.
+This document outlines the sequence of events when the Archie application starts and executes a command directly from the command line (e.g., `analyze` or `ask`). It details command-line argument parsing using `commander`, memory loading, command dispatch, execution, and memory saving before termination.
 
 ## Sequence Diagram
 
@@ -13,100 +13,101 @@ sequenceDiagram
     participant main.ts as Main
     participant commander as Commander
     participant MemoryService as Memory
-    participant shell.ts as Shell
-    participant AnalyzeCommand.ts as AnalyzeCmd
+    participant analyze.ts as AnalyzeCmd
+    participant ask.ts as AskCmd
     participant AgentGraph
-    participant inquirer as Inquirer
-    
-    User->>Terminal: node dist/main.js [--memory-file <path>] [--model <name>]
+
+    User->>Terminal: node dist/main.js <command> [options/args]
     Terminal->>Main: Executes main()
     Main->>dotenv: config() Loads .env
     Main->>Commander: Instantiates Command()
-    Main->>Commander: Defines version, description, options (--memory-file, --model)
-    Main->>Commander: parse(process.argv)
-    Commander-->>Main: Returns parsed options (memoryFile, model)
-    Main->>Terminal: Logs "Using model: ..."
+    Main->>Commander: Defines version, description, global options (--memory-file, --model)
+    Main->>Commander: Defines 'analyze' subcommand with options (-q, -i)
+    Main->>Commander: Defines 'ask' subcommand with arguments (<input...>)
+    Main->>Commander: parseOptions(process.argv) // Parses global options first
+    Commander-->>Main: Returns global options (memoryFile, model)
+    Main->>Terminal: Logs "Using model: ...", "Using memory file: ..."
     Main->>Memory: Instantiates MemoryService()
     Main->>Memory: loadMemory(filePath)
     Memory-->>Main: Memory loaded
-    Main->>Shell: startShell(memoryService, modelName)
-    Shell->>Shell: getCommandInput() waits...
-    Shell->>Inquirer: prompt([{ type: 'input', ... }])
-    Inquirer->>User: Displays "archie>" prompt
-    User->>Inquirer: Enters command (e.g., "analyze --query ...")
-    Inquirer-->>Shell: Returns { command: "..." }
-    Shell->>Shell: parseCommand(input) -> {command, args}
-    
-    alt command == "exit"
-        Shell->>Memory: saveMemory()
-        Memory-->>Shell: Memory saved
-        Shell->>Terminal: Logs "Exiting Archie..."
-        Shell-->>Main: Loop breaks
-        Main->>Terminal: Logs "Shell exited..."
-        Main->>Terminal: Process ends
-    else command == "analyze"
-        Shell->>AnalyzeCmd: handleAnalyzeCommand(args, modelName)
-        Note over AnalyzeCmd, AgentGraph: Executes analysis flow (using --inputs, see analyze_flow.md)
-        AnalyzeCmd-->>Shell: Returns control
-        Shell->>Shell: getCommandInput() waits... // Loop continues
-    else // Default command
-        Shell->>Shell: handleDefaultCommand(input, modelName)
-        Shell->>AgentGraph: invoke({ userInput: input, modelName: modelName, ... })
-        AgentGraph-->>Shell: Returns final state
-        Shell->>User: Displays Agent Response
-        Shell->>Shell: getCommandInput() waits... // Loop continues
+
+    Main->>Commander: await parseAsync(process.argv) // Parses command and executes action
+
+    alt command == "analyze"
+        Commander->>Main: Executes analyze action(options)
+        Main->>AnalyzeCmd: runAnalysis(options.query, options.inputs, modelName, Memory)
+        Note over AnalyzeCmd, AgentGraph: Executes analysis flow (potentially interactive via AgentGraph interrupts)
+        AnalyzeCmd-->>Main: Analysis completes
+    else command == "ask"
+        Commander->>Main: Executes ask action(inputParts)
+        Main->>AskCmd: runAsk(inputText, modelName, Memory)
+        AskCmd->>AgentGraph: invoke({ userInput: inputText, ... })
+        AgentGraph-->>AskCmd: Returns final state
+        AskCmd->>User: Displays Agent Response
+        AskCmd-->>Main: Ask completes
+    else // Other commands (e.g., --help, --version, unknown)
+        Commander->>Terminal: Handles help/version or shows error
+        Commander-->>Main: Parsing completes (no action run)
     end
+
+    opt Recognized command executed successfully
+        Main->>Memory: saveMemory()
+        Memory-->>Main: Memory saved
+        Main->>Terminal: Logs "Memory saved. Application shutting down."
+    else
+         Main->>Terminal: Logs "Shutting down without saving memory."
+    end
+
+    Main->>Terminal: Process ends
 ```
 
 ## Detailed Step-by-Step Description
 
 1.  **Execution Start:**
-    *   The user executes the compiled JavaScript entry point from the terminal, typically `node dist/main.js`.
-    *   Optional command-line arguments, like `--memory-file <path>` and `--model <name>`, can be provided.
+    *   The user executes the compiled JavaScript entry point from the terminal, providing a command (`analyze` or `ask`) and its specific options/arguments, along with optional global options (e.g., `node dist/main.js analyze -q "Refactor this?" -i src/code.ts --model gpt-4`).
     *   Relevant Code: Execution in Terminal.
 
 2.  **Initialization (`src/main.ts`):**
-    *   The `main()` async function in [`src/main.ts`](../src/main.ts#L14) is the primary entry point.
-    *   `dotenv.config()` is called to load environment variables from a `.env` file into `process.env`.
-    *   Relevant Code: [`main.ts L7`](../src/main.ts#L7)
+    *   The `main()` async function in [`src/main.ts`](../src/main.ts) is the entry point.
+    *   `dotenv.config()` loads environment variables.
+    *   Relevant Code: [`main.ts L10-L14`](../src/main.ts#L10-L14)
 
-3.  **Command-Line Argument Parsing (`src/main.ts`):**
+3.  **Command and Option Definition (`src/main.ts`):**
     *   An instance of `Command` from the `commander` library is created.
-    *   Application metadata (version, description) and command-line options (specifically `--memory-file` and `--model`) are defined using the `commander` API.
-    *   `program.parse(process.argv)` processes the arguments provided by the user in the terminal.
-    *   The resolved path for the memory file is determined, defaulting to `./memory.json` if the option isn't provided.
-    *   The specified `modelName` is retrieved (or the default is used).
-    *   The application logs the model being used (`Using model: ...`).
-    *   Relevant Code: [`main.ts L15-L26`](../src/main.ts#L15-L26)
+    *   Global metadata (version, description) and global options (`--memory-file`, `--model`) are defined.
+    *   The `analyze` subcommand is defined with its required options (`--query`, `--inputs`).
+    *   The `ask` subcommand is defined with its required variadic argument (`<input...>`).
+    *   Relevant Code: [`main.ts L19-L26`](../src/main.ts#L19-L26)
 
-4.  **Memory Service Instantiation and Loading (`src/main.ts`):**
-    *   An instance of `MemoryService` is created. This service manages the application's knowledge graph state.
-    *   The `memoryService.loadMemory(memoryFilePath)` method is called asynchronously. This attempts to read and parse the JSON data from the specified file path. If the file doesn't exist, it initializes an empty memory state.
-    *   Relevant Code: [`main.ts L12`](../src/main.ts#L12), [`main.ts L29-L30`](../src/main.ts#L29-L30)
+4.  **Global Option Parsing (`src/main.ts`):**
+    *   `program.parseOptions(process.argv)` is called to parse *only* the global options initially. This makes `modelName` and `memoryFilePath` available before command actions are defined.
+    *   The application logs the model and memory file being used.
+    *   Relevant Code: [`main.ts L28-L34`](../src/main.ts#L28-L34)
 
-5.  **Starting the Interactive Shell (`src/main.ts` -> `src/cli/shell.ts`):**
-    *   The `startShell(memoryService, modelName)` function from [`src/cli/shell.ts`](../src/cli/shell.ts) is called asynchronously, passing the initialized `MemoryService` instance and the selected `modelName`.
-    *   Relevant Code: [`main.ts L33`](../src/main.ts#L33)
+5.  **Memory Loading (`src/main.ts`):**
+    *   `MemoryService` is instantiated.
+    *   `memoryService.loadMemory(memoryFilePath)` is called asynchronously to load the state.
+    *   Relevant Code: [`main.ts L14`](../src/main.ts#L14), [`main.ts L37`](../src/main.ts#L37)
 
-6.  **Shell Loop (`src/cli/shell.ts`):**
-    *   `startShell` enters an infinite `while(true)` loop.
-    *   Inside the loop, `inquirer.prompt` is used to display the `archie>` prompt to the user and wait for input.
-    *   Relevant Code: [`shell.ts L7-L15`](../src/cli/shell.ts#L7-L15)
+6.  **Command Action Definition (`src/main.ts`):**
+    *   An `.action(async (options) => { ... })` is attached to the `analyze` command definition. This async function contains the logic to call `runAnalysis` from `src/commands/analyze.ts`, passing the parsed `options.query`, `options.inputs`, the global `modelName`, and the `memoryService` instance.
+    *   An `.action(async (inputParts) => { ... })` is attached to the `ask` command definition. This async function joins the `inputParts` array into a single string and calls `runAsk` from `src/commands/ask.ts`, passing the `inputText`, global `modelName`, and `memoryService`.
+    *   Relevant Code: [`main.ts L41-L69`](../src/main.ts#L41-L69)
 
-7.  **Handling User Input (`src/cli/shell.ts`):**
-    *   The `startShell` loop calls `getCommandInput()` which uses `inquirer` to get the raw command string.
-    *   `parseCommand(commandInput)` is called to split the raw string into a lowercase `command` and an array of `args` (handling quoted arguments).
-    *   A `switch` statement directs execution based on the `command`:
-        *   **`exit`:** Saves memory via `memoryService.saveMemory()`, logs messages, and breaks the loop, causing `startShell` to return.
-        *   **`analyze`:** Calls `handleAnalyzeCommand(args, modelName)` from `src/cli/AnalyzeCommand.ts`, passing the arguments and the selected model name. This delegates the entire analysis workflow. Control returns to the shell loop after `handleAnalyzeCommand` completes.
-        *   **Default:** For any other command, `handleDefaultCommand(commandInput, modelName)` is called. This function prepares a basic initial state (including `userInput` and `modelName`) and calls `agentApp.invoke()` for a single, non-interactive graph execution, displaying the result.
-    *   The shell loop continues, prompting for the next command unless `exit` was entered.
-    *   Relevant Code: [`shell.ts`](../src/cli/shell.ts) (main loop, `getCommandInput`, `parseCommand`, `switch` statement)
+7.  **Command Parsing and Execution (`src/main.ts`):**
+    *   `await program.parseAsync(process.argv);` is called. `commander` parses the full command line, identifies the subcommand (`analyze` or `ask`), parses its specific options/arguments, and executes the corresponding `.action()` handler defined in the previous step.
+    *   If the command is `analyze`, the `analyze` action runs, calling `runAnalysis`. `runAnalysis` reads files, sets up initial state, and potentially enters an interactive loop (`analysisIteration` using `inquirer` via the AgentGraph) if the agent needs clarification, before producing the final output.
+    *   If the command is `ask`, the `ask` action runs, calling `runAsk`. `runAsk` invokes the agent graph (`agentApp.invoke`) with the user input for a single response.
+    *   If the command is not recognized, or if `--help` or `--version` was used, `commander` handles it directly (displaying help/version or an error), and no custom action is executed.
+    *   Relevant Code: [`main.ts L72`](../src/main.ts#L72), [`src/commands/analyze.ts`](../src/commands/analyze.ts), [`src/commands/ask.ts`](../src/commands/ask.ts)
 
-8.  **Application Shutdown (`src/main.ts`):**
-    *   Once the `startShell` function returns (which only happens after the loop is broken by the `exit` command), the `main` function logs "Shell exited. Application shutting down."
-    *   The `main` function completes execution. If it finishes successfully, the Node.js process exits cleanly. Error handling is present to catch issues during `main`.
-    *   Relevant Code: [`main.ts L36`](../src/main.ts#L36), [`main.ts L39-L42`](../src/main.ts#L39-L42) 
+8.  **Memory Saving and Shutdown (`src/main.ts`):**
+    *   **After** `program.parseAsync` completes, the code checks if a known command (`analyze` or `ask`) was successfully executed.
+    *   If yes, `memoryService.saveMemory()` is called asynchronously.
+    *   Logs indicate whether memory was saved before the application shuts down.
+    *   If no command action was run (e.g., `--help`, error, unknown command), memory is *not* saved.
+    *   The `main` function completes, and the Node.js process exits.
+    *   Relevant Code: [`main.ts L75-L89`](../src/main.ts#L75-L89)
 
 ## Agent Graph Structure
 

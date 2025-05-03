@@ -1,3 +1,4 @@
+// TODO: This file is obsolete as its logic has been moved to src/commands/analyze.ts and should be deleted.
 import { Command } from "@langchain/langgraph";
 // import * as shell from "./shell"; // Import shell namespace for defaults
 import { dbg, say, newGraphConfig, Input, SayFn, DbgFn } from "./shell"; 

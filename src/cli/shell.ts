@@ -1,3 +1,4 @@
+// TODO: This file is obsolete due to the removal of the interactive shell and should be deleted.
 import inquirer from 'inquirer';
 import { MemoryService } from '../memory/MemoryService';
 import { app as agentApp, AppState } from '../agents/graph';
