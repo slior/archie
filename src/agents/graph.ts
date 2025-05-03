@@ -1,46 +1,98 @@
-import { StateGraph, END, START } from "@langchain/langgraph";
+import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { echoAgentNode } from "./EchoAgentNode";
-import { supervisorNode } from "./SupervisorNode";
+import { analysisPrepareNode } from "./AnalysisPrepareNode";
+import { analysisInterruptNode } from "./AnalysisInterruptNode";
+import { dbg } from "../cli/shell";
 
 // Define node names as constants
-const SUPERVISOR = "supervisor";
 const ECHO_AGENT = "echoAgent";
+const ANALYSIS_PREPARE = "analysisPrepare";
+const ANALYSIS_INTERRUPT = "analysisInterrupt";
+
+type Role = 'user' | 'agent';
+
+const CMD_ECHO = "echo";
 
 // Define the state interface that will flow through the graph
 export interface AppState {
   userInput: string;
   response: string; // Stores the latest response from an agent
-  // TODO: Add conversation history, memory access, etc.
+  // Additions for Analysis Agent
+  fileContents: Record<string, string>; // Content of input files, keyed by path
+  analysisHistory: Array<{ role: Role; content: string }>; // Conversation history
+  analysisOutput: string; // Final output from analysis agent
+  currentAnalysisQuery: string; // Question posed by agent during interrupt
+  modelName: string; // Item 17: Add modelName
+}
+
+function shouldTriggerAnalysis(userInput: string): boolean {
+    const analysisKeywords = ["analyze", "analysis", "review requirement", "start analysis"];
+    return analysisKeywords.some(keyword => userInput.includes(keyword));
 }
 
 // Instantiate the graph
 const workflow = new StateGraph<AppState>({
         channels: {
-            // The input channel lets us specify the type and assign responsibility for updating it
-            userInput: { value: (x, y) => y ?? x, default: () => "" }, // Persist userInput across steps, allow override
-            // The response channel will be updated by the echo agent
-            response: { value: (x, y) => y, default: () => "" }, // Take the new response
+            //save the new user input
+            userInput: { value: (currentState, update) => update !== undefined && update !== null ? update : currentState, default: () => "" },   
+            response: { value: (x, y) => y, default: () => "" },                                        // Takes new response (used by echo)
+            fileContents: { value: (x, y) => y ?? x, default: () => ({}) },                             // Persist, allow override
+            analysisHistory: { value: (x, y) => (x || []).concat(y || []), default: () => ([]) },       // Append new messages
+            analysisOutput: { value: (x, y) => y, default: () => "" },                                  // Takes new output
+            currentAnalysisQuery: { value: (x, y) => y, default: () => "" },                            // Takes new query
+            modelName: { value: (x, y) => y ?? x, default: () => "" }, // Item 18: Add channel config
         },
     })
-    .addNode(SUPERVISOR, supervisorNode)
     .addNode(ECHO_AGENT, echoAgentNode)
-    .addEdge(START, SUPERVISOR)
-    .addConditionalEdges(SUPERVISOR, async (state: AppState) => {
-            const { nextNode } = await supervisorNode(state);
-            // Ensure the returned value is one of the expected keys
-            if (nextNode === ECHO_AGENT) {
-                return ECHO_AGENT;
+    .addNode(ANALYSIS_PREPARE, analysisPrepareNode)
+    .addNode(ANALYSIS_INTERRUPT, analysisInterruptNode)
+    
+    // Make the conditional edge originate from START
+    .addConditionalEdges(START, 
+        (state: AppState) => { // Keep synchronous
+            
+            const userInput = state.userInput.toLowerCase();
+            let nextNodeDecision: string;
+
+            // Determine initial routing based on input
+            switch (true) {
+                case shouldTriggerAnalysis(userInput):
+                    nextNodeDecision = ANALYSIS_PREPARE;
+                    break;
+                case userInput.startsWith(CMD_ECHO):
+                    nextNodeDecision = ECHO_AGENT;
+                    break;
+                default:
+                    nextNodeDecision = END;
+                    break;
             }
-            // Add checks for other valid nodes or END
-            return END;
+            
+            dbg(`Initial Routing Condition: Routing to ${nextNodeDecision}`); // Updated log message
+            return nextNodeDecision;
         },
-        // {
-        //     [ECHO_AGENT as string]: ECHO_AGENT,
-        //     [END as string]: END,
-        // } as Record<string, string>[]
+        {
+            // Mapping destinations
+            [ECHO_AGENT]: ECHO_AGENT,
+            [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
+            [END]: END,
+        }
     )
     .addEdge(ECHO_AGENT, END)
+    .addConditionalEdges(ANALYSIS_PREPARE,
+        (state: AppState) => { // Keep synchronous 
+            if (state.analysisOutput) {
+                return END;
+            } else {
+                return ANALYSIS_INTERRUPT;
+            }
+        },
+        {
+            [END]: END,
+            [ANALYSIS_INTERRUPT]: ANALYSIS_INTERRUPT
+        }
+    )
+    .addEdge(ANALYSIS_INTERRUPT, ANALYSIS_PREPARE) // After interrupt node, go back to the PREPARE node to process the resumed input
 ;
 
-// Compile the graph into a runnable app
-export const app = workflow.compile(); 
+const checkpointer = new MemorySaver();
+export const app = workflow.compile({ checkpointer }); 

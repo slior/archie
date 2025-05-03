@@ -28,7 +28,7 @@ Later evolutions of the system may have different interfaces, e.g. web-based, so
 
 
 ## General
-1. The system view will be managed using @memory mcp tools, loaded potentially from a file.
+1. The agents will use the memory mechanism (MemoryService) to store the overall system view, and pass it as state between the agents.
 2. Inputs will be file-based (relative or absolute paths) for text/markdown/log files.
 3. The agent architecture will involve multiple agents (Analysis, Documenter, Planning, Info Gathering, etc.) orchestrated by a supervisor in a simple flow.
 4. LLM configuration will be flexible (multiple models supported) via environment variables or CLI arguments.
@@ -46,14 +46,23 @@ Input artifacts include:
 4. Execution logs and traces.
 5. System code artifacts.
 6. Feature request(s) and/or bug reports.
+7. Meeting transcriptions and/or written design discussions over email/messaging software.
 
+The input is given as a path to a directory where all the relevant files reside.
 The agent should engage the user in a conversation with the aim of analyzing the existing material and come up with an implementation plan for the task at hand.
 The agent should engage ask the user any clarifying questions.
 The agent should ask the user for an explicit description of the task, if not given.
 The user should answer any questions.
 The agent should compile the answers, and offer solution options, explaining trade offs between options.
 The user may choose to ask further questions.
-This cycle should proceed until the user specifically inputs: "SOLUTION APPROVED".
+This cycle should proceed until the user specifically inputs: "SOLUTION APPROVED" or "DONE".
 
 Upon approval, the agent should output a detailed description of the approved solution.
 This should include a complete account of all assumptions, all decisions, and reasoning for the choice of this specific solution.
+All output should be output to the same directory given as output, to new files summarizing the analysis.
+The summary should include (if possible):
+- Identified assumptions
+- Identified main components
+- Discussed alternatives with tradeoffs
+- Summary of design decisions reached and why.
+- A list of open questions.

@@ -1,53 +1,161 @@
 import inquirer from 'inquirer';
 import { MemoryService } from '../memory/MemoryService';
 import { app as agentApp, AppState } from '../agents/graph';
+import { handleAnalyzeCommand } from './AnalyzeCommand';
+import * as uuid from 'uuid';
+import { Command } from '@langchain/langgraph';
 
-export async function startShell(memoryService: MemoryService) {
-  console.log('Starting interactive shell. Type "exit" to quit.');
+const EXIT_COMMAND = 'exit';
+const ANALYZE_COMMAND = 'analyze';
 
-  while (true) {
-    const answers = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'command',
-        message: 'archie> ',
-      },
-    ]);
+export type Input = Partial<AppState> | Command;
+export type SayFn = typeof say;
+export type DbgFn = typeof dbg;
 
-    const commandInput = answers.command.trim();
 
-    if (commandInput.toLowerCase() === 'exit') {
-      console.log('Saving memory before exiting...');
-      await memoryService.saveMemory();
-      console.log('Exiting Archie...');
-      break; // Exit the loop
-    } else if (commandInput === '') {
-        continue; // Ignore empty input
-    }
+/**
+ * Creates a new configuration object for the agent graph with a unique thread ID.
+ * 
+ * This function generates a new UUID v4 thread ID and returns it wrapped in a 
+ * configuration object structure expected by the LangGraph framework. The thread ID
+ * is used to maintain conversation state and history across multiple graph executions.
+ * 
+ * @returns {Object} Configuration object with format { configurable: { thread_id: string } }
+ */
+export function newGraphConfig()
+{
+    const thread_id = uuid.v4();
+    return { configurable: { thread_id } };
+}
 
-    // Handle non-exit commands by invoking the agent graph
+
+/**
+ * Handles commands that don't match any special keywords by passing them directly to the agent graph.
+ * 
+ * This function creates an initial state with the command as user input and empty fields for other
+ * state properties, then invokes the agent graph for a single-turn response.
+ * it makes one call and returns the response.
+ * 
+ * @param commandInput - The raw command string entered by the user
+ * @param modelName - The model name selected at startup
+ * @throws Error if the agent graph fails to execute or is not available
+ */
+export async function handleDefaultCommand(commandInput: string, modelName: string) {
     if (!agentApp) {
-        console.log("Error: Agent graph is not compiled or available.");
-        continue;
+        dbg("Error: Agent graph is not compiled or available.");
+        return;
     }
-
     try {
-        console.log(`Invoking agent graph with input: "${commandInput}"`);
-        // Define the initial state for this invocation
-        const initialState: AppState = {
+        dbg(`Invoking agent graph with input: "${commandInput}"`);
+        // Define the initial state for this invocation, including defaults for new fields
+        const initialState: Partial<AppState> = {
             userInput: commandInput,
             response: "", // Start with an empty response
-            // TODO: Add other necessary state parts like conversation history or memory references
+            fileContents: {},
+            analysisHistory: [],
+            analysisOutput: "",
+            currentAnalysisQuery: "",
+            modelName: modelName,
         };
-
-        // Invoke the graph
-        const result = await agentApp.invoke(initialState);
-
-        // Display the final response from the graph state
-        console.log("Agent Response:", result.response); // Access the 'response' channel from the final state
-
+        const config = newGraphConfig();
+        // Invoke the graph - Cast needed as invoke expects full state usually
+        const result = await agentApp.invoke(initialState, config);
+        say(`Agent Response: ${result.response}`); // Display the final response from the graph state
     } catch (error) {
-        console.error("Error during agent graph execution:", error);
+        dbg(`Error during default graph execution: ${error}`);
+        throw error;
+    }
+}
+
+/**
+ * Prompts the user for command input in the interactive shell.
+ * 
+ * Uses inquirer to display a prompt with "archie> " and collect user input.
+ * Trims whitespace from the input before returning.
+ * 
+ * @returns Promise that resolves to the trimmed command string entered by user
+ */
+export async function getCommandInput() : Promise<string>
+{
+    const answers = await inquirer.prompt([
+        { type: 'input', name: 'command', message: 'archie> ' }
+    ]);
+    return answers.command.trim();
+}
+
+/**
+ * Parses a command line input string into a command and arguments.
+ * 
+ * Handles quoted arguments by preserving spaces within quotes and removing the quotes.
+ * For example: `analyze --query "my query" --inputs test.ts` becomes:
+ * - command: "analyze"
+ * - args: ["--query", "my query", "--inputs", "test.ts"]
+ * 
+ * @param commandInput - The raw command line input string to parse
+ * @returns An object containing:
+ *   - command: The first word of input, converted to lowercase
+ *   - args: Array of remaining arguments, with quotes stripped from quoted arguments
+ */
+export function parseCommand(commandInput: string) : {command: string, args: string[]}
+{
+    const parts = commandInput.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    const command = parts[0]?.toLowerCase() || '';
+    const args = parts.slice(1).map((arg: string) => 
+        (arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'")) 
+        ? arg.slice(1, -1) 
+        : arg
+    );
+    return { command, args };
+}
+
+
+
+/**
+ * Starts an interactive command-line shell for interacting with the agent system.
+ * 
+ * The shell provides a REPL (Read-Eval-Print Loop) interface that accepts the following commands:
+ * - 'exit': Saves the memory state and exits the shell
+ * - 'analyze --query "..." --inputs <path>': Runs analysis on specified files with the given query
+ * - Any other input is treated as a message for the default agent handler
+ * 
+ * @param memoryService - Service for persisting agent memory state between sessions
+ * @param modelName - The model name selected at startup
+ * @returns Promise that resolves when the shell is exited
+ */
+export async function startShell(memoryService: MemoryService, modelName: string) {
+  console.log('Starting interactive shell. Type "exit" to quit.');
+  console.log('Available commands: exit, analyze --query "...\" --inputs <path> ..., or provide input for default agent.');
+
+  let shellRunning = true;
+  while (shellRunning) {
+    
+    const commandInput = await getCommandInput();
+    const { command, args } = parseCommand(commandInput);
+
+    switch (command)    
+    {
+        case EXIT_COMMAND:
+            say('Saving memory before exiting...');
+            await memoryService.saveMemory();
+            say('Exiting Archie...');
+            shellRunning = false;
+            break;
+        case ANALYZE_COMMAND:
+            await handleAnalyzeCommand(args, modelName);
+            break;
+        default:
+            // Treat the entire input as input for the default command handler
+            await handleDefaultCommand(commandInput, modelName);
+            break;
     }
   }
-} 
+}
+
+
+export function dbg(s: string) {
+    console.debug(s);
+}
+
+export function say(s : string) {
+    console.log(s);
+}
