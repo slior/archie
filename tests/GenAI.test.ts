@@ -43,7 +43,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         mockAgentAppGetState = sinon.stub(agentApp, 'getState');
         mockReadFiles = sinon.stub(analyzeCmd, 'readFiles');
         mockPersistOutput = sinon.stub(analyzeCmd, 'persistFinalOutput');
-        mockOpenAICall = sinon.stub(LLMUtils, 'callOpenAI');
+        mockOpenAICall = sinon.stub(LLMUtils, 'callTheLLM');
 
         // Mocking commander is tricky; stubbing the opts method on the prototype
         // This assumes the structure `new Command()...parse().opts()`
@@ -263,21 +263,21 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         it('mock uses provided modelName if valid', async () => {
             const specificModel = 'model-to-use';
             // Call the stubbed function
-            await LLMUtils.callOpenAI(history, prompt, specificModel);
+            await LLMUtils.callTheLLM(history, prompt, specificModel);
             // Check the arguments passed to the mock stub
             expect(mockOpenAICall.calledOnceWith(history, prompt, specificModel)).to.be.true;
             // Manual Verification check: Actual debug logs in LLMUtils show correct model used.
         });
 
         it('mock uses DEFAULT_MODEL if modelName is undefined', async () => {
-            await LLMUtils.callOpenAI(history, prompt, undefined);
+            await LLMUtils.callTheLLM(history, prompt, undefined);
             expect(mockOpenAICall.calledOnceWith(history, prompt, undefined)).to.be.true;
              // Manual Verification check: Actual debug logs in LLMUtils show default model used.
              // The *real* implementation should use DEFAULT_MODEL internally.
         });
 
         it('mock uses DEFAULT_MODEL if modelName is empty string', async () => {
-            await LLMUtils.callOpenAI(history, prompt, '');
+            await LLMUtils.callTheLLM(history, prompt, '');
             expect(mockOpenAICall.calledOnceWith(history, prompt, '')).to.be.true;
              // Manual Verification check: Actual debug logs in LLMUtils show default model used.
              // The *real* implementation should use DEFAULT_MODEL internally.

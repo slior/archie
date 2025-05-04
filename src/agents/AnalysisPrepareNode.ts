@@ -2,7 +2,8 @@ import { AppState, Role } from "./graph";
 // No longer need interrupt here
 // import { interrupt } from "@langchain/langgraph"; 
 import { say,dbg } from "../utils";
-import { callOpenAI } from './LLMUtils'; // Import the OpenAI utility
+// import { callOpenAI } from './LLMUtils'; // Import the OpenAI utility
+import { callTheLLM } from './LLMUtils'; // Import the OpenAI utility
 import * as path from 'path'; // Import path here
 
 // Define the type for history based on AppState Role
@@ -72,7 +73,7 @@ async function callLLM(
 
     try {
         // Pass the existing history and the newly constructed prompt instruction
-        return await callOpenAI(history, constructedPrompt, modelName);
+        return await callTheLLM(history, constructedPrompt, modelName);
     } catch (error) {
         console.error("Error in callLLM calling callOpenAI:", error);
         // Rethrow a user-friendly error or handle as needed
