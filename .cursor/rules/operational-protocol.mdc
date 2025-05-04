@@ -55,6 +55,7 @@ IMPLEMENTATION CHECKLIST:
 n. [Final action]
 Duration: Until I explicitly approve plan and signal to move to next mode
 Output Format: Begin with [MODE: PLAN], then ONLY specifications and implementation details
+If a specification file is given, persist the plan in the "Plan" section of the file, using markdown format.
 
 ### MODE 4: EXECUTE
 [MODE: EXECUTE]

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "mocha --require ts-node/register tests/**/*.test.ts",
+    "test:watch": "mocha --require ts-node/register tests/**/*.test.ts --watch src/**/*.ts",
     "build": "tsc",
     "start": "ts-node src/main.ts",
     "docs:graph": "ts-node ./scripts/update-graph-docs.ts"
