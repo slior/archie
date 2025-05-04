@@ -50,11 +50,11 @@ sequenceDiagram
         Commander-->>Main: Parsing completes (no action run)
     end
 
-    opt Recognized command executed successfully
+    alt Recognized command executed successfully
         Main->>Memory: saveMemory()
         Memory-->>Main: Memory saved
         Main->>Terminal: Logs "Memory saved. Application shutting down."
-    else
+    else No successful command action run
          Main->>Terminal: Logs "Shutting down without saving memory."
     end
 
