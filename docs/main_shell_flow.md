@@ -64,7 +64,7 @@ sequenceDiagram
 ## Detailed Step-by-Step Description
 
 1.  **Execution Start:**
-    *   The user executes the compiled JavaScript entry point from the terminal, providing a command (`analyze` or `ask`) and its specific options/arguments, along with optional global options (e.g., `node dist/main.js analyze -q "Refactor this?" -i src/code.ts --model gpt-4`).
+    *   The user executes the compiled JavaScript entry point from the terminal, providing a command (`analyze` or `ask`) and its specific options/arguments, along with optional global options (e.g., `node dist/main.js analyze -q "Refactor this?" --inputs ./src/some_code_dir --model gpt-4`).
     *   Relevant Code: Execution in Terminal.
 
 2.  **Initialization (`src/main.ts`):**

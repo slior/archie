@@ -1,33 +1,17 @@
 import { app as agentApp, AppState } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService'; 
-import * as uuid from 'uuid'; 
-import { dbg, say } from '../utils';
-
-// --- Helper Functions (Adapted/Moved) ---
-
-// export function dbg(s: string) {
-//     console.debug(`[Ask] ${s}`);
-// }
-
-// export function say(s: string) {
-//     console.log(s);
-// }
-
-export function newGraphConfig() {
-    const thread_id = uuid.v4();
-    return { configurable: { thread_id } };
-}
+import { dbg, say, newGraphConfig } from '../utils';
 
 // --- Core Logic ---
 
 /**
- * Handles the 'ask' command by passing the user input directly to the agent graph
- * for a single-turn response.
- *
- * @param inputText The raw text input/question from the user.
- * @param modelName The AI model name to use.
- * @param memoryService The memory service instance (currently unused here).
- * @throws Error if the agent graph fails to execute.
+ * Handles the 'ask' command by passing user input to the agent graph for processing.
+ * 
+ * @param inputText - The text input/question from the user to send to the agent
+ * @param modelName - The name of the AI model to use for processing the input
+ * @param memoryService - Memory service instance for state persistence (saving handled in main.ts)
+ * @returns Promise<void> 
+ * @throws Error if the agent graph fails to execute or is not available
  */
 export async function runAsk(
     inputText: string,

@@ -1,17 +1,23 @@
-import { AppState } from "./graph";
+import { AppState, Role } from "./graph";
 // No longer need interrupt here
 // import { interrupt } from "@langchain/langgraph"; 
-import { say,dbg } from "../cli/shell";
+import { say,dbg } from "../utils";
 import { callOpenAI } from './LLMUtils'; // Import the OpenAI utility
 import * as path from 'path'; // Import path here
 
 // Define the type for history based on AppState Role
-type Role = 'user' | 'agent';
+// type Role = 'user' | 'agent';
 type HistoryMessage = { role: Role; content: string };
 
 const PROMPT_TYPE_INITIAL = 'initial';
 const PROMPT_TYPE_FOLLOWUP = 'followup';
 const PROMPT_TYPE_FINAL = 'final';
+/**
+ * Represents the type of prompt to generate for the LLM.
+ * - PROMPT_TYPE_INITIAL: Used for the first interaction to understand the user's analysis goals
+ * - PROMPT_TYPE_FOLLOWUP: Used for continuing the conversation and gathering more details
+ * - PROMPT_TYPE_FINAL: Used to generate the final analysis summary
+ */
 type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typeof PROMPT_TYPE_FINAL;
 
 
@@ -45,8 +51,14 @@ function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Rec
 }
 
 /**
- * Abstracted LLM call function.
- * Constructs the appropriate prompt based on the context and calls the underlying LLM utility.
+ * Makes a call to the Language Learning Model (LLM) with the appropriate prompt and context.
+ * 
+ * @param history - Array of previous conversation messages between user and agent
+ * @param files - Record of filenames and their contents that provide context
+ * @param promptType - Type of prompt to generate (initial, followup, or final)
+ * @param modelName - Name of the LLM model to use
+ * @returns Promise resolving to the LLM's response string
+ * @throws Error if the LLM call fails or there are API issues
  */
 async function callLLM(
     history: HistoryMessage[], 
@@ -68,6 +80,23 @@ async function callLLM(
     }
 }
 
+/**
+ * Generates and returns the final analysis output after user approval.
+ * 
+ * This function is called when the user indicates they are satisfied with the analysis
+ * and want to see the final summary. It makes a final LLM call to generate a comprehensive
+ * analysis based on the full conversation history.
+ *
+ * @param currentHistory - Array of previous conversation messages between user and agent
+ * @param lastUserMessage - The user's final message indicating approval
+ * @param state - Current application state containing model name and file contents
+ * @returns Promise resolving to a partial state update containing:
+ *          - analysisOutput: The final analysis summary
+ *          - analysisHistory: Updated conversation history with final messages
+ *          - userInput: Cleared
+ *          - currentAnalysisQuery: Cleared
+ * @throws Error if LLM call fails (caught internally and returns error state)
+ */
 async function returnFinalOutput(
     currentHistory: HistoryMessage[], 
     lastUserMessage: string, 
@@ -150,6 +179,17 @@ async function callLLMForNextStep(currentHistory: HistoryMessage[], state: AppSt
     }
 }
 
+/**
+ * Prepares and manages the analysis conversation flow between user and agent.
+ * 
+ * This node handles:
+ * 1. Adding new user input to the conversation history
+ * 2. Checking if the user has approved/completed the analysis
+ * 3. Either generating final output or continuing the conversation with the LLM
+ *
+ * @param state - The current application state containing user input and conversation history
+ * @returns Promise<Partial<AppState>> - Updated state with new conversation history, analysis output, or next query
+ */
 export async function analysisPrepareNode(state: AppState): Promise<Partial<AppState>> {
     dbg("--- Analysis Prepare Node Running ---"); // Updated log
     const currentUserInput = state.userInput;
@@ -164,8 +204,8 @@ export async function analysisPrepareNode(state: AppState): Promise<Partial<AppS
         return await returnFinalOutput(currentHistory, lastUserMessageContent, state);
     }
 
-    // 3. Normal conversational turn - Call LLM for the next step
+    // Normal conversational turn - Call LLM for the next step
     dbg("Analysis Prepare: Calling LLM for next step.");
     
     return await callLLMForNextStep(currentHistory, state);
-} 
+}

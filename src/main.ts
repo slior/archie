@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import * as path from 'path';
-// import { startShell } from './cli/shell'; // Removed: No longer using interactive shell
 import { MemoryService } from './memory/MemoryService';
 import * as dotenv from 'dotenv';
 import { DEFAULT_MODEL } from './agents/LLMUtils';
@@ -91,7 +90,7 @@ async function main() {
 
     // Check if any command was actually run. If not (e.g., just --help), don't save.
     // Commander doesn't expose a simple flag for this, so we check if args imply a command.
-    const commandWasExecuted = program.args.length > 0 && program.args[0] !== 'help'; // Simple check
+    // const commandWasExecuted = program.args.length > 0 && program.args[0] !== 'help'; // Simple check
     const executedCommandName = program.args[0];
     const knownCommands = program.commands.map(cmd => cmd.name());
 
@@ -115,11 +114,6 @@ async function main() {
       process.exit(COMMAND_PARSING_ERROR);
   }
 
-  // Removed: Old shell start call
-  // await startShell(memoryService, modelName);
-
-  // Removed: Old shutdown log
-  // console.log("Shell exited. Application shutting down.");
 }
 
 main().catch(error => {

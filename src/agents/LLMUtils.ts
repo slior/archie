@@ -1,10 +1,13 @@
 import OpenAI from "openai";
 import * as dotenv from 'dotenv';
-import { dbg } from "../cli/shell";
+import { dbg } from "../utils";
 
 // Load environment variables
 dotenv.config();
 
+/**
+ * The default OpenAI model to use when no specific model is provided.
+ */
 export const DEFAULT_MODEL = 'gpt-3.5-turbo';
 
 /**

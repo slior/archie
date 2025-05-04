@@ -56,3 +56,15 @@ The primary goal of this implementation was to remove the interactive shell comp
 *   The solution to the stubbing error relied on knowledge gained from previous implementation challenges and was applied reactively rather than being pre-emptively included in this feature's plan.
 
 Overall, the feature was implemented successfully, migrating the application from an interactive shell to a standard CLI structure, albeit with notable challenges encountered and overcome during the testing phase.
+
+## Post-Implementation Test Debugging & Cleanup
+
+Further debugging and refinement occurred after the initial implementation:
+
+1.  **Test Failure (`tests/GenAI.test.ts` - Test Case 3):** A test designed to check if the default model name was correctly passed down failed because the mock for `agentApp.stream` was never called (`firstCall` was `null`).
+2.  **Root Cause Analysis:** The issue stemmed from letting the real `analysisIteration` and `runGraph` functions execute while mocking their deep dependency (`agentApp.stream`). This mixed approach was unreliable.
+3.  **Test Refactoring:** Test Case 3 was refactored to mock the direct dependency (`analyzeCmd.analysisIteration`) instead. This provided better isolation and allowed direct verification that the initial state passed to the first iteration contained the correct `modelName`.
+4.  **`readFiles` Stubbing Issue:** Debugging revealed that `runAnalysis` was exiting early because the call to the internal `readFiles` function was failing. The test's attempt to stub the *exported* `readFiles` (`sinon.stub(analyzeCmd, 'readFiles')`) did not affect the internal call.
+5.  **Dependency Injection Fix:** To resolve the `readFiles` issue, the Dependency Injection pattern was applied. `runAnalysis` was updated to accept `readFilesFn` as an optional parameter (defaulting to the local `readFiles`). The corresponding test was updated to pass a mock function explicitly for this parameter, ensuring the mock was used.
+6.  **`newGraphConfig` Stubbing Fix:** A similar issue with stubbing `newGraphConfig` was corrected, ensuring the stub targeted the function on the imported `utils` module namespace.
+7.  **Obsolete File Deletion:** The files `src/cli/shell.ts` and `src/cli/AnalyzeCommand.ts`, previously marked with `// TODO: Obsolete...`, were deleted from the codebase.

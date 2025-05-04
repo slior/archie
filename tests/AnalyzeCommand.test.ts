@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { Input } from '../src/cli/shell';
+import { Input } from '../src/commands/analyze';
 import * as path from 'path'; // For mocking resolve
 import inquirer from 'inquirer'; // For mocking prompt
 import { app as agentApp, AppState } from '../src/agents/graph';
@@ -138,7 +138,6 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
         const contentGood2 = 'content3';
         const readError = new Error('Permission denied');
 
-        // const mockResolve = path.resolve;
         const mockResolveFn = sinon.stub();
         mockResolveFn.withArgs(dirPath,dirents[0]).returns(resolvedGood1);
         mockResolveFn.withArgs(dirPath,dirents[2]).returns(resolvedGood2);

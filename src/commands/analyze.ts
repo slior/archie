@@ -4,10 +4,9 @@ import * as path from 'path';
 import inquirer from 'inquirer';
 import { app as agentApp, AppState } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService';
-import * as uuid from 'uuid'; 
-import { dbg, say } from '../utils';
+import { dbg, say, newGraphConfig } from '../utils';
 // Define types needed within this command module
-type Input = Partial<AppState> | Command;
+export type Input = Partial<AppState> | Command;
 type ResolveFn = (...paths: string[]) => string;
 type RunGraphFn = typeof runGraph;
 type PromptFn = (questions: any[]) => Promise<any>;
@@ -22,23 +21,8 @@ type GetStateFn = (config: any) => Promise<{ values: Partial<AppState> }>;
 type GetFinalOutputFn = typeof getFinalOutput;
 type DisplayFinalOutputFn = typeof displayFinalOutputToUser;
 type PersistFinalOutputFn = typeof persistFinalOutput;
-type ReadFilesFn = (filePaths: string[]) => Promise<Record<string, string>>;
+type ReadFilesFn = (directoryPath: string, readFileFn?: BasicReadFileFn, resolveFn?: ResolveFn) => Promise<Record<string, string>>;
 type BasicReadFileFn = (path: string, encoding: string) => Promise<string>;
-
-// --- Helper Functions (Adapted/Moved) ---
-
-// export function dbg(s: string) {
-//     console.debug(`[Analyze] ${s}`);
-// }
-
-// export function say(s: string) {
-//     console.log(s);
-// }
-
-export function newGraphConfig() {
-    const thread_id = uuid.v4();
-    return { configurable: { thread_id } };
-}
 
 // --- Core Logic ---
 
@@ -63,7 +47,7 @@ export async function runAnalysis(
     modelName: string,
     memoryService: MemoryService, // Keep signature consistent, though save is handled in main
     // Injected Dependencies for testability
-    // readFilesFn: ReadFilesFn = readInputFiles,
+    readFilesFn: ReadFilesFn = readFiles,
     newGraphConfigFn: typeof newGraphConfig = newGraphConfig,
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
     getStateFn: GetStateFn = agentApp.getState.bind(agentApp),
@@ -77,8 +61,7 @@ export async function runAnalysis(
     }
 
     dbg(`Reading content for input files from: ${inputsDir}`);
-    // const fileContents = await readFilesFn(inputs);
-    const fileContents = await readFiles(inputsDir);
+    const fileContents = await readFilesFn(inputsDir);
     if (Object.keys(fileContents).length === 0) {
         say("Error: Could not read any of the specified input files.");
         return;
@@ -107,17 +90,26 @@ export async function runAnalysis(
 
     dbg("Analysis loop finished. Retrieving final output.");
     // Determine output directory from the first input file's directory
-    // const outputDir = inputsDir.length > 0 ? path.dirname(path.resolve(inputsDir[0])) : '.';
+
 
     const finalOutput = await getFinalOutputFn(config, getStateFn);
     displayFinalOutputFn(finalOutput);
     await persistFinalOutputFn(finalOutput, inputsDir);
 
-    // No memoryService.saveMemory() call here - handled in main.ts
     dbg("runAnalysis completed.");
 }
 
 
+/**
+ * Reads text and markdown files from a specified directory and returns their contents.
+ * 
+ * @param directoryPath - The path to the directory containing files to read
+ * @param readFileFn - Function to read file contents (defaults to fs.promises.readFile)
+ * @param resolveFn - Function to resolve file paths (defaults to path.resolve)
+ * @param readdirFn - Function to read directory contents (defaults to fs.promises.readdir)
+ * @returns Promise resolving to an object mapping file paths to their contents
+ * @throws Error if the directory cannot be read or if there are errors reading individual files
+ */
 export async function readFiles(
     directoryPath: string,
     readFileFn: BasicReadFileFn = fsPromises.readFile as BasicReadFileFn,
@@ -143,7 +135,7 @@ export async function readFiles(
         }
     } catch (error) {
         console.error(`Error reading input directory ${directoryPath}:`, error);
-        // Potentially rethrow or handle differently
+        throw error;
     }
     finally {
         return fileContents;
@@ -151,45 +143,30 @@ export async function readFiles(
 }
 
 /**
- * Reads the content of specified input files.
- *
- * @param filePaths Array of absolute or relative file paths.
- * @param readFileFn Basic file reading function.
- * @param resolveFn Path resolution function.
- * @returns A record mapping resolved file paths to their content.
+ * Retrieves the final analysis output from the agent graph's state.
+ * 
+ * @param config - Configuration object containing graph execution settings
+ * @param getStateFn - Function to retrieve the current state of the agent graph
+ * @returns Promise resolving to the analysis output string, or empty string if not found/error
+ * @throws Error if there are issues retrieving the graph state (caught internally)
  */
-export async function readInputFiles(
-    filePaths: string[],
-    readFileFn: (path: string, encoding: BufferEncoding) => Promise<string> = fsPromises.readFile,
-    resolveFn: ResolveFn = path.resolve
-): Promise<Record<string, string>> {
-    const fileContents: Record<string, string> = {};
-    for (const filePath of filePaths) {
-        const resolvedPath = resolveFn(filePath);
-        try {
-            dbg(`Reading file: ${resolvedPath}`);
-            fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
-        } catch (readError: any) {
-            say(`Warning: Error reading file ${resolvedPath}: ${readError.message}. Skipping.`);
-            // Skip the file, but continue with others
-        }
-    }
-    return fileContents;
-}
-
-
 export async function getFinalOutput(config: any, getStateFn: GetStateFn): Promise<string> {
     try {
         const finalState = await getStateFn(config);
-        // Ensure analysisOutput exists and is a string
         return finalState.values?.analysisOutput ?? "";
     } catch (error) {
         console.error("Error retrieving final graph state:", error);
-        // Return empty string or rethrow depending on desired error handling
         return "";
     }
 }
 
+/**
+ * Displays the final analysis output to the user in a formatted way.
+ * Adds visual separators around the output for better readability.
+ * 
+ * @param output - The analysis output string to display
+ *                 If empty/null/undefined, displays a default message
+ */
 export function displayFinalOutputToUser(output: string) {
     say("\n--- Final Analysis Output ---");
     say(output || "No analysis output generated.");
@@ -197,6 +174,17 @@ export function displayFinalOutputToUser(output: string) {
 }
 
 
+/**
+ * Persists the analysis output to a markdown file in the specified directory.
+ * Creates an 'analysis_result.md' file containing the output text.
+ * 
+ * @param output - The analysis output string to save to file
+ * @param targetDir - The directory path where the output file should be created
+ * @param resolveFn - Function to resolve file paths (defaults to path.resolve)
+ * @param writeFileFn - Function to write files (defaults to fs.promises.writeFile)
+ * @returns Promise<void>
+ * @throws Logs but does not throw errors if file writing fails
+ */
 export async function persistFinalOutput(
     output: string,
     targetDir: string,
@@ -213,6 +201,22 @@ export async function persistFinalOutput(
 }
 
 
+/**
+ * Executes a single iteration of the analysis process, handling agent interruptions and user interactions.
+ * This is an internal function used by the analyze command. It's exported for testing purposes.
+ * 
+ * This function runs one iteration of the agent graph and handles two possible outcomes:
+ * 1. The agent interrupts to request user input - in which case it prompts the user and prepares the next iteration
+ * 2. The agent completes without interruption - in which case the analysis is marked as done
+ *
+ * @param currentInput - The current Input object containing the analysis state/command
+ * @param config - Configuration object containing thread ID and other settings
+ * @param runGraphFn - Function to execute the agent graph (defaults to runGraph)
+ * @param promptFn - Function to prompt for user input (defaults to inquirer.prompt)
+ * @returns Promise containing:
+ *          - isDone: boolean indicating if analysis is complete
+ *          - newInput: Input object for the next iteration (if not done)
+ */
 export async function analysisIteration(
     currentInput: Input,
     config: any,
@@ -241,6 +245,21 @@ export async function analysisIteration(
 }
 
 
+/**
+ * Executes the agent graph and processes its stream output to handle interruptions.
+ * This is an internal function used by the analyze command. It's exported for testing purposes.
+ * 
+ * This function streams the agent graph execution and watches for interrupt signals
+ * that indicate the agent needs user input to continue. It processes the stream
+ * chunks until either an interrupt is encountered or the stream completes.
+ *
+ * @param currentInput - The current Input object containing the analysis state/command
+ * @param config - Configuration object containing thread ID and other settings
+ * @returns Promise containing:
+ *          - interrupted: boolean indicating if agent requested user input
+ *          - agentQuery: string containing the agent's question if interrupted
+ * @throws Error if the agent graph execution fails
+ */
 export async function runGraph(currentInput: Input, config: any): Promise<{ interrupted: boolean, agentQuery: string }> {
     let stream;
     let agentQuery = "";
@@ -249,17 +268,7 @@ export async function runGraph(currentInput: Input, config: any): Promise<{ inte
     try {
         dbg("Invoking agent graph...");
         stream = await agentApp.stream(currentInput, config);
-        // for await (const event of stream) {
-        //     if (event.event === 'on_chat_model_stream') {
-        //         // Log stream events if needed
-        //         // const content = event.data?.chunk?.message?.content;
-        //         // if (content) process.stdout.write(content);
-        //     } else if (event.event === 'on_tool_end') {
-        //          dbg(`Tool ${event.name} finished.`);
-        //     } else if (event.event === 'on_tool_start') {
-        //          dbg(`Tool ${event.name} started with input: ${JSON.stringify(event.data.input)}`);
-        //     }
-        //  }
+
         for await (const chunk of stream) {
             
             if (chunk.__interrupt__) {
@@ -272,32 +281,12 @@ export async function runGraph(currentInput: Input, config: any): Promise<{ inte
              // Consider logging other node outputs here if needed
              // e.g., if (chunk.supervisor) { console.log("Supervisor output:", chunk.supervisor); }
         }
-        // Check the final state for interruption
-        // This assumes the graph sets a specific flag or state upon interruption.
-        // Let's refine this based on how `agentApp` actually signals interruption.
-        // For now, we assume getState() reveals if it paused.
-        // **This part needs verification against the actual graph implementation**
-        // const finalState = await agentApp.getState(config);
-        // Example: Check if a specific node indicating interruption is the last one active
-        // Or if a specific field in the state signifies interruption.
-        // If the graph uses LangGraph's built-in interrupt handling:
-        // if (finalState.next && finalState.next.length > 0 && finalState.next.includes('__interrupt__')) {
-        //      interrupted = true;
-        //      // Attempt to extract the agent's query from the state if available
-        //      agentQuery = finalState.values?.currentAnalysisQuery || "Agent requires input."; // Example state field
-        //      dbg(`Graph interrupted. Agent query: "${agentQuery}"`);
-        // } else {
-        //     dbg("Graph finished without explicit interruption signal in state.");
-        //      interrupted = false; // Ensure it's false if no interrupt found
-        //  }
 
     } catch (error) {
         console.error("Error executing agent graph:", error);
-        // Decide how to handle graph execution errors - rethrow or return specific state?
         // Returning as non-interrupted might be misleading. Rethrowing might be better.
          throw error; // Rethrow for now
     }
 
-    // Return based on whether an interruption occurred and any query extracted
     return { interrupted, agentQuery };
-} 
+}

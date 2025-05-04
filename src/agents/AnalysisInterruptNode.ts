@@ -1,10 +1,25 @@
 import { AppState } from "./graph";
 import { interrupt } from "@langchain/langgraph";
-import { dbg } from "../cli/shell"; // Corrected import path for dbg
+import { dbg } from "../utils"; // Corrected import path for dbg
 
 /**
- * This node triggers the interrupt and, upon resuming,
- * captures the user's input and returns it in the state update.
+ * A node in the analysis workflow that interrupts execution to get user input.
+ * 
+ * This node:
+ * 1. Checks the current analysis query in the state
+ * 2. Interrupts the workflow to ask the user the query
+ * 3. Waits for and captures the user's response
+ * 4. Returns the response in the state for the next node
+ *
+ * @param state - The current application state containing the query to ask
+ * @returns A Promise resolving to a partial state update with the user's input
+ * @throws Will not throw, but returns empty input if no query exists
+ *
+ * @example
+ * // State contains query: "What file should I analyze?"
+ * const result = await analysisInterruptNode(state);
+ * // Interrupts, waits for user input "src/main.ts"
+ * // Returns { userInput: "src/main.ts" }
  */
 export async function analysisInterruptNode(state: AppState): Promise<Partial<AppState>> { // Change return type
     dbg("--- Analysis Interrupt Node Running ---");
@@ -26,4 +41,4 @@ export async function analysisInterruptNode(state: AppState): Promise<Partial<Ap
     return { 
         userInput: resumedUserInput as string // Cast needed as interrupt returns any
     }; 
-} 
+}
