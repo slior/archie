@@ -28,7 +28,7 @@ let clientInstance: ILLMClient | null = null;
  * @returns The singleton instance of the configured ILLMClient.
  * @throws Error if the required API key for the selected provider is missing.
  */
-function getLLMClient(): ILLMClient {
+export function getLLMClient(): ILLMClient {
     if (clientInstance) {
         return clientInstance;
     }
