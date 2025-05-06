@@ -25,24 +25,15 @@ Archie uses environment variables for configuration, primarily for LLM API keys 
     ```
 2.  Add necessary environment variables to the `.env` file. Key variables include:
     
-    *   `LLM_PROVIDER`: (Optional) Specifies the LLM provider to use. 
-        *   Set to `litellm` to use the LiteLLM provider.
-        *   Set to `openai` or leave unset to use the default OpenAI provider.
-    *   `OPENAI_API_KEY`: **Required** if using the `openai` provider (or if `LLM_PROVIDER` is unset). Your OpenAI API key.
-    *   `LITELLM_API_KEY`: **Required** if using the `litellm` provider. This key is typically used for authenticating with a LiteLLM proxy service.
-        *   **Note:** If `LLM_PROVIDER=litellm` and `LITELLM_API_KEY` is *not* set, the underlying `litellm` library might still attempt to use provider-specific keys (like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) if they are present in the environment, depending on the model requested. However, the primary intended configuration for the `litellm` provider in Archie is via `LITELLM_API_KEY` for proxy usage.
+    *   `OPENAI_API_KEY`: **Required**. Your OpenAI API key. This key is used to authenticate requests to the OpenAI API. The expected variable name is `OPENAI_API_KEY`.
+    *   `BASE_URL`: (Optional) Specifies a custom base URL for the OpenAI API. This is useful if you are using a proxy or a self-hosted instance of an OpenAI-compatible API. If not set, the official OpenAI API URL will be used. The expected variable name is `BASE_URL`.
 
     Example `.env` file contents:
 
     ```dotenv
-    # Example 1: Using default OpenAI provider
-    LLM_PROVIDER=openai
+    # Example: Using OpenAI provider
     OPENAI_API_KEY=sk-...
-
-    # Example 2: Using LiteLLM provider (likely via a proxy)
-    # LLM_PROVIDER=litellm
-    # LITELLM_API_KEY=your-litellm-proxy-key
-    # OPENAI_API_KEY=sk-...  # May still be needed by LiteLLM if calling OpenAI models
+    # BASE_URL=https://your-proxy-url/v1 # Optional: if using a proxy for OpenAI
     ```
 
 ## Building

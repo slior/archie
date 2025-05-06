@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import * as dotenv from 'dotenv';
 import { ILLMClient, ChatMessage } from "./ILLMClient";
-import { OPENAI_API_KEY_ENV_VAR, DEFAULT_MODEL_NAME } from "./llmConstants";
+import { OPENAI_API_KEY_ENV_VAR, OPENAI_BASE_URL_ENV_VAR, DEFAULT_MODEL_NAME } from "./llmConstants";
 import { dbg } from "../utils";
 
 // Load environment variables
@@ -33,7 +33,7 @@ export class OpenAIClient implements ILLMClient {
             throw new Error(errorMessage);
         }
 
-        let baseURL = process.env['BASE_URL'] || '';
+        let baseURL = process.env[OPENAI_BASE_URL_ENV_VAR] || '';
         if (!baseURL) {
             console.warn('BASE_URL is not set in environment variables. Using default OpenAI URL.');
             this.openai = new OpenAI({ apiKey: this.apiKey });
