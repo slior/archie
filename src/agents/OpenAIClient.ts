@@ -5,22 +5,53 @@ import { OPENAI_API_KEY_ENV_VAR, DEFAULT_MODEL_NAME } from "./llmConstants";
 import { dbg } from "../utils";
 
 // Load environment variables
-dotenv.config();
+dotenv.config({debug: true});
 
+/**
+ * OpenAIClient implements the ILLMClient interface to provide chat completion functionality
+ * using OpenAI's API. It handles API authentication, base URL configuration, and message formatting.
+ */
 export class OpenAIClient implements ILLMClient {
+    /** OpenAI client instance for making API calls */
     private openai: OpenAI;
+    /** API key for authenticating with OpenAI */
     private apiKey: string;
 
+    /**
+     * Initializes a new OpenAIClient instance.
+     * Sets up the OpenAI client with API key and optional base URL from environment variables.
+     * @throws Error if OpenAI API key is not set in environment variables
+     */
     constructor() {
         this.apiKey = process.env[OPENAI_API_KEY_ENV_VAR] || '';
+
+        dbg(`ENV: ${JSON.stringify(process.env[OPENAI_API_KEY_ENV_VAR])}`);
+
         if (!this.apiKey) {
             const errorMessage = `OpenAI API key (${OPENAI_API_KEY_ENV_VAR}) is not set in environment variables.`;
             console.warn(errorMessage);
             throw new Error(errorMessage);
         }
-        this.openai = new OpenAI({ apiKey: this.apiKey });
+
+        let baseURL = process.env['BASE_URL'] || '';
+        if (!baseURL) {
+            console.warn('BASE_URL is not set in environment variables. Using default OpenAI URL.');
+            this.openai = new OpenAI({ apiKey: this.apiKey });
+        }
+        else {
+            console.log(`Using base URL: ${baseURL}`);
+            this.openai = new OpenAI({ apiKey: this.apiKey, baseURL: baseURL });
+        }
     }
 
+    /**
+     * Makes a chat completion request to OpenAI's API.
+     * @param history - Array of previous chat messages
+     * @param prompt - The current user prompt to send
+     * @param options - Optional parameters including model name override
+     * @returns Promise resolving to the AI's response text
+     * @throws Error if API call fails or returns empty content
+     */
     async chatCompletion(
         history: ChatMessage[],
         prompt: string,
@@ -73,4 +104,4 @@ export class OpenAIClient implements ILLMClient {
             throw new Error(`Failed to communicate with OpenAI: ${error.message}`);
         }
     }
-} 
+}

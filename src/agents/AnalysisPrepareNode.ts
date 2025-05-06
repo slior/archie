@@ -1,13 +1,9 @@
 import { AppState, Role } from "./graph";
-// No longer need interrupt here
-// import { interrupt } from "@langchain/langgraph"; 
 import { say,dbg } from "../utils";
-// import { callOpenAI } from './LLMUtils'; // Import the OpenAI utility
 import { callTheLLM } from './LLMUtils'; // Import the OpenAI utility
 import * as path from 'path'; // Import path here
 
 // Define the type for history based on AppState Role
-// type Role = 'user' | 'agent';
 type HistoryMessage = { role: Role; content: string };
 
 const PROMPT_TYPE_INITIAL = 'initial';
@@ -21,21 +17,75 @@ const PROMPT_TYPE_FINAL = 'final';
  */
 type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typeof PROMPT_TYPE_FINAL;
 
+/**
+ * Summarizes the contents of multiple files into a single formatted string.
+ * 
+ * @param files - An object mapping file paths to their contents
+ * @returns A formatted string containing summaries of all files, with each file's content
+ *          truncated to 1000 characters if needed. Returns "No file content provided" if
+ *          the files object is empty.
+ * 
+ * Each file summary is formatted as:
+ * --- File: filename.ext ---
+ * [file contents]
+ * 
+ * Files are separated by double newlines in the output.
+ */
+function summarizeFiles(files: Record<string, string>): string {
+    const summaries: string[] = [];
+    const MAX_LENGTH = 1000;
 
+    if (Object.keys(files).length === 0) {
+        return "No file content provided.";
+    }
+
+    for (const [filePath, content] of Object.entries(files)) {
+        const basename = path.basename(filePath);
+        let displayContent = content;
+        if (content.length > MAX_LENGTH) {
+            displayContent = content.substring(0, MAX_LENGTH) + '... [truncated]';
+        }
+        const fileSummary = `--- File: ${basename} ---\n${displayContent}`;
+        summaries.push(fileSummary);
+    }
+
+    return summaries.join('\n\n');
+}
+
+/**
+ * Generates a prompt for the LLM based on the prompt type, conversation history, and available files.
+ * 
+ * @param promptType - The type of prompt to generate (initial, followup, or final)
+ * @param history - Array of previous conversation messages between user and agent
+ * @param files - Record of filenames and their contents that provide context
+ * @returns A constructed prompt string appropriate for the given prompt type
+ * 
+ * The function handles three types of prompts:
+ * - Initial: Creates a prompt to analyze the user's first query and understand analysis goals
+ * - Followup: Creates a prompt to continue the analysis based on ongoing conversation
+ * - Final: Creates a prompt to generate a comprehensive summary of the analysis
+ * 
+ * For initial prompts, it includes detailed file summaries.
+ * For followup and final prompts, it includes file names for context.
+ * The function uses debug logging to track prompt construction.
+ */
 function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Record<string, string>) : string
 {
     dbg(`\n--- Constructing LLM Prompt (Type: ${promptType}) ---`);
     let constructedPrompt: string;
-    const fileList = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None'; // Use path.basename
+    // Define fileList here so it's available to all branches
+    const fileList = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None';
 
-    // Use history directly (callOpenAI expects the full history)
-    // The prompt passed to callOpenAI is the specific instruction for *this* turn.
-    
+    // Use history directly (callLLM expects the full history)
+    // The prompt passed to callLLM is the specific instruction for *this* turn.
+
     if (promptType === PROMPT_TYPE_INITIAL) {
         const firstUserMessage = history.find(m => m.role === 'user')?.content || '(No initial query found)';
-        constructedPrompt = `Analyze the user query based on the provided files. Files: [${fileList}]. User's initial query: "${firstUserMessage}". What is the primary goal for this analysis? Ask clarifying questions if needed.`;
+        const fileSummaries = summarizeFiles(files); // Call the summarizer
+        // Use fileSummaries in the prompt instead of fileList
+        constructedPrompt = `Analyze the user query based on the following file summaries:\n\n${fileSummaries}\n\nUser's initial query: "${firstUserMessage}".\n\nWhat is the primary goal for this analysis? Ask clarifying questions if needed.`;
     } else if (promptType === PROMPT_TYPE_FINAL) {
-        // Construct detailed final summary prompt
+        // Construct detailed final summary prompt (uses fileList for context)
         constructedPrompt = `Based on the following conversation history: ${JSON.stringify(history)} and the context of files: [${fileList}], generate a final analysis summary for the user. The summary should include (if possible based on the conversation):
         - Identified assumptions
         - Identified main components involved
@@ -45,11 +95,14 @@ function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Rec
         Provide only the summary content.`;
     } else { // PROMPT_TYPE_FOLLOWUP
         // For follow-up, the history contains the context. The prompt should guide the LLM on what to do next.
-        // We pass the full history to callOpenAI, and this prompt acts as the latest instruction.
+        // We pass the full history to callLLM, and this prompt acts as the latest instruction.
+        // Uses fileList for context.
         constructedPrompt = `Continue the analysis based on the latest user message in the history. Files provided: [${fileList}]. Ask further clarifying questions or provide analysis as appropriate.`;
     }
+    dbg(`Constructed prompt:\n${constructedPrompt}`);
     return constructedPrompt;
 }
+
 
 /**
  * Makes a call to the Language Learning Model (LLM) with the appropriate prompt and context.

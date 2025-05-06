@@ -2,9 +2,8 @@ import { Command } from 'commander';
 import * as path from 'path';
 import { MemoryService } from './memory/MemoryService';
 import * as dotenv from 'dotenv';
-import { DEFAULT_MODEL } from './agents/LLMUtils';
+import { DEFAULT_MODEL_NAME } from './agents/llmConstants';
 import { dbg, say } from './utils';
-// Import new command handlers
 import { runAnalysis } from './commands/analyze';
 import { runAsk } from './commands/ask';
 
@@ -29,7 +28,7 @@ async function main() {
     .version('1.0.0')
     .description('Archie - AI Architecture Assistant (CLI Mode)')
     .option('--memory-file <path>', 'Path to the memory JSON file', './memory.json')
-    .option('--model <name>', 'Specify the OpenAI model to use', DEFAULT_MODEL)
+    .option('--model <name>', 'Specify the OpenAI model to use', DEFAULT_MODEL_NAME)
     .enablePositionalOptions(); // Recommended when using subcommands with global options
 
   // Retrieve global options early (for use in command actions)

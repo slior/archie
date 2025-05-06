@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { describe, it, beforeEach, afterEach } from 'mocha';
-import { DEFAULT_MODEL } from '../src/agents/LLMUtils';
+import { DEFAULT_MODEL_NAME } from '../src/agents/llmConstants';
 import * as LLMUtils from '../src/agents/LLMUtils'; // Import namespace for stubbing
 import { AppState, app as agentApp } from '../src/agents/graph'; // Import AppState type and agentApp for stubbing
 import * as analyzeCmd from '../src/commands/analyze';
@@ -47,7 +47,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
         // Mocking commander is tricky; stubbing the opts method on the prototype
         // This assumes the structure `new Command()...parse().opts()`
-        mockCommanderOpts = sinon.stub().returns({ memoryFile: './memory.json', model: DEFAULT_MODEL });
+        mockCommanderOpts = sinon.stub().returns({ memoryFile: './memory.json', model: DEFAULT_MODEL_NAME });
         mockCommanderParse = sinon.stub().returns({ opts: mockCommanderOpts }); // .parse() returns object with opts()
         sinon.stub(CommanderCommand.prototype, 'version').returnsThis();
         sinon.stub(CommanderCommand.prototype, 'description').returnsThis();
@@ -79,7 +79,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
     it('1. Startup logs default model when --model is not provided', () => {
         
-        expect(mockCommanderParse().opts().model).to.equal(DEFAULT_MODEL);
+        expect(mockCommanderParse().opts().model).to.equal(DEFAULT_MODEL_NAME);
         // To actually check the console log, main() would need to be called here.
     });
 
@@ -102,7 +102,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
     it('3. Analyze command uses default model when not specified via CLI', async () => {
         const testQuery = 'test query';
         const testInputsDir = './data';
-        const modelName = DEFAULT_MODEL; // Explicitly use the default model
+        const modelName = DEFAULT_MODEL_NAME; // Explicitly use the default model
         const testConfig = { configurable: { thread_id: 'test-thread-default' } };
 
         // Mock functions called BEFORE the target interaction
@@ -139,7 +139,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
         // Verify the key point: the first argument of the first call includes the correct modelName
         expect(mockAnalysisIteration.firstCall.args[0]) // Get the first argument (initialAppState)
-            .to.deep.include({ modelName: DEFAULT_MODEL }); // Assert it includes the modelName
+            .to.deep.include({ modelName: DEFAULT_MODEL_NAME }); // Assert it includes the modelName
 
         // Optional: Verify config was also passed correctly
         expect(mockAnalysisIteration.firstCall.args[1]).to.deep.equal(testConfig);
@@ -196,7 +196,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
     it('5. Default command includes default model in initial state passed to invoke', async () => {
         const commandInput = 'hello world';
-        const modelName = DEFAULT_MODEL;
+        const modelName = DEFAULT_MODEL_NAME;
         mockAgentAppInvoke.resolves({ response: 'Default response' }); 
         const config = { configurable: { thread_id: 'test-default-cmd-default' } };
         sinon.stub(utils, 'newGraphConfig').returns(config);
@@ -213,7 +213,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             analysisHistory: [],
             analysisOutput: "",
             currentAnalysisQuery: "",
-            modelName: DEFAULT_MODEL, // Verify this field
+            modelName: DEFAULT_MODEL_NAME, // Verify this field
         };
         expect(mockAgentAppInvoke.calledWith(sinon.match(expectedInitialStateDefault), sinon.match.object)).to.be.true;
 
