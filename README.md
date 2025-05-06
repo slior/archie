@@ -17,18 +17,33 @@ Archie is a system of AI agents designed to assist with software architecture an
 
 ## Configuration
 
-Archie uses environment variables for configuration, primarily for LLM API keys (though LLM integration is not part of this initial setup).
+Archie uses environment variables for configuration, primarily for LLM API keys and provider selection.
 
-1.  Create a `.env` file in the project root:
+1.  Create a `.env` file in the project root if it doesn't exist:
     ```bash
     touch .env
     ```
-2.  Add necessary environment variables to the `.env` file. For example:
+2.  Add necessary environment variables to the `.env` file. Key variables include:
+    
+    *   `LLM_PROVIDER`: (Optional) Specifies the LLM provider to use. 
+        *   Set to `litellm` to use the LiteLLM provider.
+        *   Set to `openai` or leave unset to use the default OpenAI provider.
+    *   `OPENAI_API_KEY`: **Required** if using the `openai` provider (or if `LLM_PROVIDER` is unset). Your OpenAI API key.
+    *   `LITELLM_API_KEY`: **Required** if using the `litellm` provider. This key is typically used for authenticating with a LiteLLM proxy service.
+        *   **Note:** If `LLM_PROVIDER=litellm` and `LITELLM_API_KEY` is *not* set, the underlying `litellm` library might still attempt to use provider-specific keys (like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) if they are present in the environment, depending on the model requested. However, the primary intended configuration for the `litellm` provider in Archie is via `LITELLM_API_KEY` for proxy usage.
+
+    Example `.env` file contents:
+
     ```dotenv
-    # Example for OpenAI (add your actual key)
-    # OPENAI_API_KEY=sk-...
+    # Example 1: Using default OpenAI provider
+    LLM_PROVIDER=openai
+    OPENAI_API_KEY=sk-...
+
+    # Example 2: Using LiteLLM provider (likely via a proxy)
+    # LLM_PROVIDER=litellm
+    # LITELLM_API_KEY=your-litellm-proxy-key
+    # OPENAI_API_KEY=sk-...  # May still be needed by LiteLLM if calling OpenAI models
     ```
-    *(Note: Environment variable handling is set up, but no agent currently uses them.)*
 
 ## Building
 

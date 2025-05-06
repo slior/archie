@@ -1,78 +1,85 @@
-import OpenAI from "openai";
 import * as dotenv from 'dotenv';
 import { dbg } from "../utils";
+import { OpenAIClient } from './OpenAIClient';
+import { ILLMClient, ChatMessage } from './ILLMClient';
+import { Role } from './graph';
 
 // Load environment variables
 dotenv.config();
 
-/**
- * The default OpenAI model to use when no specific model is provided.
- */
-export const DEFAULT_MODEL = 'gpt-3.5-turbo';
+// Singleton instance for the LLM client
+let clientInstance: ILLMClient | null = null;
 
 /**
- * Calls the OpenAI Chat Completions API.
+ * Factory function to get the configured LLM client instance.
+ * Creates the instance on first call based on environment variables.
+ * @returns The singleton instance of the configured ILLMClient.
+ * @throws Error if the required API key for the selected provider is missing.
+ */
+export function getLLMClient(): ILLMClient {
+    if (clientInstance) {
+        return clientInstance;
+    }
+
+    try {
+        clientInstance = new OpenAIClient();
+    } catch (error) {
+         console.error(`Failed to initialize OpenAIClient: ${error}`);
+        throw error; // Re-throw error after logging
+    }
+
+    return clientInstance;
+}
+
+/**
+ * Calls the configured LLM provider's Chat Completions API.
  * 
- * @param history The conversation history.
+ * @param history The conversation history, using internal roles ('user', 'agent').
  * @param prompt The specific user prompt/instruction for this turn.
- * @param modelName Optional model name to override the default.
+ * @param modelName Optional model name to override the provider's default.
  * @returns The content of the LLM's response.
  * @throws Error if API key is missing, API call fails, or response is empty.
  */
-export async function callOpenAI(
-    // Use only roles compatible with AppState definition
-    history: Array<{ role: "user" | "agent"; content: string }>, 
+export async function callTheLLM(
+    // Use internal Role type for input history
+    history: Array<{ role: Role; content: string }>, 
     prompt: string,
     modelName?: string
 ): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const client = getLLMClient();
 
-    if (!apiKey) {
-        console.warn("OpenAI API key (OPENAI_API_KEY) is not set in environment variables.");
-        throw new Error("OpenAI API key (OPENAI_API_KEY) is not set in environment variables.");
-    }
-
-    const openai = new OpenAI({ apiKey });
-
-    // Map internal roles to OpenAI roles ('agent' -> 'assistant')
-    const mappedHistory = history.map(msg => ({
-        // Ensure role is either 'user' or 'assistant' for the API call
-        role: msg.role === 'agent' ? 'assistant' as const : 'user' as const,
+    // Map internal roles ('user', 'agent') to standard roles ('user', 'assistant') 
+    // expected by the client interface (ChatMessage type)
+    const mappedHistory: ChatMessage[] = history.map(msg => ({
+        role: msg.role === 'agent' ? 'assistant' : 'user',
         content: msg.content
     }));
 
-    // Combine history with the current prompt as a user message
-    // Explicitly type the array to satisfy OpenAI's expected types
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        ...mappedHistory,
-        { role: 'user', content: prompt }
-    ];
+    // Determine the effective model name. Pass undefined to let clients handle defaults.
+    const effectiveModel = modelName && modelName.trim() !== '' ? modelName : undefined;
 
     try {
-        // Determine effective model and log it
-        const effectiveModel = modelName && modelName.trim() !== '' ? modelName : DEFAULT_MODEL;
-        dbg('\n--- Calling OpenAI API ---');
-        dbg(`Using model for API call: ${effectiveModel}`);
+        // Use dbg for logging the call details
+        // const providerName = process.env[LLM_PROVIDER_ENV_VAR]?.toLowerCase() || OPENAI_PROVIDER;
+        // dbg(`\n--- Calling LLM provider (${providerName}) ---`);
+        dbg(`Model requested: ${effectiveModel || 'Provider Default'}`);
         
-        const completion = await openai.chat.completions.create({
-            model: effectiveModel,
-            messages: messages,
-            temperature: 0.7, 
-            max_tokens: 1500, 
-        });
-        dbg('--- OpenAI API Call Complete ---');
+        // Call the client's chatCompletion method, passing mapped history and the prompt separately
+        const responseContent = await client.chatCompletion(mappedHistory, prompt, { modelName: effectiveModel });
+        
+        dbg('--- LLM Call Complete ---');
 
-        const responseContent = completion.choices[0]?.message?.content;
-
+        // Basic check if response is valid (client implementations should ensure non-empty responses)
         if (!responseContent) {
-            console.warn("OpenAI API call returned successfully but contained no content.");
-            throw new Error("OpenAI API call returned successfully but contained no content.");
+            console.warn("LLM call returned empty content.");
+            throw new Error("LLM call returned empty content.");
         }
 
         return responseContent;
     } catch (error: any) {
-        console.error("Error calling OpenAI API:", error);
-        // Rethrow a new error to avoid leaking too many details potentially
-        throw new Error(`Failed to communicate with OpenAI: ${error.message}`);
+        // Log the error centrally
+        console.error("Error during LLM call:", error);
+        // Rethrow a standardized error message
+        throw new Error(`LLM API call failed: ${error.message}`);
     }
 } 
