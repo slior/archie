@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Learn from your past mistakes, or you are doomed to repeat them.
+- @memory_bank.md is a file that stores and logs the summary of each chat interaction with the user regarding the project we are working on.
+- Read the entire ./docs/memory_bank.md file before answering.
+- If you see a successful solution to the problem you are facing right now in @memory_bank.md, use a similar approach.
+- After you finished answering, write your insights in the ./docs/memory_bank.md file as following (use markdown format):
+ - Title: one line summary and the current datetime in the format "DD-MM-YYYY hour:minute".
+ - What did you discover about the project that you didn't know before?
+ - What was the problem you faced in this chat interaction?
+ - How did you approach the problem?
+ - Did your approach fix the problem?
