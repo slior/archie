@@ -1,7 +1,9 @@
 import { AppState, Role } from "./graph";
-import { say,dbg } from "../utils";
+import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
 import { callTheLLM } from './LLMUtils'; // Import the OpenAI utility
 import * as path from 'path'; // Import path here
+import { PromptService } from "../services/PromptService"; // Added PromptService import
+import { RunnableConfig } from "@langchain/core/runnables"; // Import RunnableConfig
 
 // Define the type for history based on AppState Role
 type HistoryMessage = { role: Role; content: string };
@@ -117,19 +119,52 @@ function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Rec
 async function callLLM(
     history: HistoryMessage[], 
     files: Record<string, string>,
-    promptType: PromptType,
-    modelName: string
+    promptKey: PromptType, // Changed name from promptType to promptKey for clarity
+    modelName: string,
+    promptService?: PromptService
 ): Promise<string> {
     
-    const constructedPrompt = getPrompt(promptType, history, files);
-    dbg(`Prompt Instruction: ${constructedPrompt}`);
+    dbg(`callLLM received promptService: ${!!promptService}, using promptKey: ${promptKey}`);
+    
+    if (!promptService) {
+        // This should ideally not happen if the service is correctly injected everywhere.
+        // However, as a safeguard during transition or if a call path misses it:
+        say("Warning: PromptService not available in callLLM. LLM call might fail or use basic prompts.");
+        // Fallback to a very basic instruction or throw an error specific to this missing service.
+        // For now, let it proceed and potentially fail at callTheLLM if prompt is not adequate.
+        // Or, throw new Error("PromptService is required but not provided to callLLM.");
+        // Let's try to make a very basic prompt if service is missing for now, rather than erroring hard here.
+        const basicFallbackPrompt = `User query based on history: ${JSON.stringify(history)}. Files: ${Object.keys(files).join(', ') || 'None'}.`;
+        dbg(`Prompt Instruction (fallback due to missing PromptService): ${basicFallbackPrompt}`);
+        return await callTheLLM(history, basicFallbackPrompt, modelName);
+    }
+
+    let context: Record<string, any> = {};
+    const fileListString = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None';
+
+    if (promptKey === PROMPT_TYPE_INITIAL) {
+        context = {
+            fileSummaries: summarizeFiles(files),
+            firstUserMessage: history.find(m => m.role === 'user')?.content || '(No initial query found)'
+        };
+    } else if (promptKey === PROMPT_TYPE_FINAL) {
+        context = {
+            history: JSON.stringify(history),
+            fileList: fileListString
+        };
+    } else { // PROMPT_TYPE_FOLLOWUP
+        context = {
+            fileList: fileListString
+        };
+    }
+
+    const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptKey, context);
+    dbg(`Prompt Instruction (from PromptService): ${constructedPrompt}`);
 
     try {
-        // Pass the existing history and the newly constructed prompt instruction
         return await callTheLLM(history, constructedPrompt, modelName);
     } catch (error) {
-        console.error("Error in callLLM calling callOpenAI:", error);
-        // Rethrow a user-friendly error or handle as needed
+        console.error("Error in callLLM calling callTheLLM:", error);
         throw new Error("LLM communication failed. Please check logs or API key.");
     }
 }
@@ -154,14 +189,13 @@ async function callLLM(
 async function returnFinalOutput(
     currentHistory: HistoryMessage[], 
     lastUserMessage: string, 
-    state: AppState
+    state: AppState,
+    promptService?: PromptService
 ) : Promise<Partial<AppState>> {
     say("Analysis Agent: Solution approved by user.");
     try {
-        // Item 21: Get modelName from state and pass to callLLM
         const modelName = state.modelName; 
-        // Call the abstracted LLM function for the final summary
-        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL, modelName);
+        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL, modelName, promptService);
         const finalAgentMsg = { role: 'agent' as const, content: "Okay, generating the final solution description." };
 
         return {
@@ -204,15 +238,17 @@ function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInpu
     return currentHistory;
 }
 
-async function callLLMForNextStep(currentHistory: HistoryMessage[], state: AppState) : Promise<Partial<AppState>> {
+async function callLLMForNextStep(
+    currentHistory: HistoryMessage[], 
+    state: AppState,
+    promptService?: PromptService
+) : Promise<Partial<AppState>> {
+    dbg("Analysis Agent: Thinking...");
     try {
-        // Item 22: Get modelName from state and pass to callLLM
-        const modelName = state.modelName; 
+        const modelName = state.modelName;
         // Determine prompt type based on history
-        // Consider it 'initial' only if history *only* contains the first user message
-        const promptType = currentHistory.length <= 1 ? 'initial' : 'followup'; 
-        
-        const agentResponse = await callLLM(currentHistory, state.fileContents, promptType, modelName);
+        const promptType = currentHistory.length <= 1 && currentHistory.every(m => m.role === 'user') ? PROMPT_TYPE_INITIAL : PROMPT_TYPE_FOLLOWUP;
+        const agentResponse = await callLLM(currentHistory, state.fileContents, promptType, modelName, promptService); // Pass promptService and corrected promptType
         const agentMsg = { role: 'agent' as const, content: agentResponse };
 
         dbg(`Agent response generated: ${agentResponse}`);
@@ -242,24 +278,25 @@ async function callLLMForNextStep(currentHistory: HistoryMessage[], state: AppSt
  * 3. Either generating final output or continuing the conversation with the LLM
  *
  * @param state - The current application state containing user input and conversation history
+ * @param config - The LangGraph RunnableConfig, which may contain our AppGraphConfigurable settings
  * @returns Promise<Partial<AppState>> - Updated state with new conversation history, analysis output, or next query
  */
-export async function analysisPrepareNode(state: AppState): Promise<Partial<AppState>> {
-    dbg("--- Analysis Prepare Node Running ---"); // Updated log
+export async function analysisPrepareNode(state: AppState, config?: RunnableConfig): Promise<Partial<AppState>> {
+    const appConfigurable = config?.configurable as AppGraphConfigurable | undefined;
+    const promptService = appConfigurable?.promptService;
+    dbg(`analysisPrepareNode received promptService via RunnableConfig: ${!!promptService}`);
+
+    dbg("--- Analysis Prepare Node Running ---");
     const currentUserInput = state.userInput;
-    // Ensure history is correctly typed using HistoryMessage
     let currentHistory: HistoryMessage[] = state.analysisHistory || [];
     
-    currentHistory = addUserInputToHistory(currentHistory, currentUserInput); // 1. Add user input to history
+    currentHistory = addUserInputToHistory(currentHistory, currentUserInput);
     
-    const lastUserMessageContent = currentHistory.filter(m => m.role === 'user').pop()?.content || ""; // 2. Check for approval keyword BEFORE calling LLM for this turn
+    const lastUserMessageContent = currentHistory.filter(m => m.role === 'user').pop()?.content || "";
     if (userIsDone(lastUserMessageContent)) {
-        // If approved, generate final output
-        return await returnFinalOutput(currentHistory, lastUserMessageContent, state);
+        return await returnFinalOutput(currentHistory, lastUserMessageContent, state, promptService);
     }
 
-    // Normal conversational turn - Call LLM for the next step
     dbg("Analysis Prepare: Calling LLM for next step.");
-    
-    return await callLLMForNextStep(currentHistory, state);
+    return await callLLMForNextStep(currentHistory, state, promptService);
 }

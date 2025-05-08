@@ -11,6 +11,7 @@ import inquirer from 'inquirer';
 import { Command as LangGraphCommand, StateSnapshot } from '@langchain/langgraph'; // For instanceOf check
 import * as askCmd from '../src/commands/ask';
 import * as utils from '../src/utils';
+import { PromptService } from '../src/services/PromptService';
 
 // Define mockMemoryServiceInstance at a higher scope
 let mockMemoryServiceInstance: MemoryService;
@@ -125,6 +126,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             testInputsDir,
             modelName, // Pass DEFAULT_MODEL
             mockMemoryServiceInstance,
+            new PromptService(),
             mockReadFiles, 
             utils.newGraphConfig, 
             mockAnalysisIteration, 
@@ -174,6 +176,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             args[3], // inputsDir
             modelName, // Passed from main/shell
             new MemoryService(), 
+            new PromptService(),
             mockReadFiles, 
             utils.newGraphConfig, 
             analyzeCmd.analysisIteration, 
@@ -202,7 +205,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         sinon.stub(utils, 'newGraphConfig').returns(config);
 
         
-        await askCmd.runAsk(commandInput, modelName, new MemoryService());
+        await askCmd.runAsk(commandInput, modelName, new MemoryService(), new PromptService());
 
         // Check that agentApp.invoke was called with initialState containing the default modelName
         expect(mockAgentAppInvoke.calledOnce).to.be.true;
@@ -229,7 +232,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         sinon.stub(utils, 'newGraphConfig').returns(config);
 
         // await handleDefaultCommand(commandInput, modelName);
-        await askCmd.runAsk(commandInput, modelName, new MemoryService());
+        await askCmd.runAsk(commandInput, modelName, new MemoryService(), new PromptService());
 
         expect(mockAgentAppInvoke.calledOnce).to.be.true;
         const expectedInitialStateSpecific = {

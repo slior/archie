@@ -1,0 +1,7 @@
+Analyze the user query based on the following file summaries:
+
+{{fileSummaries}}
+
+User's initial query: "{{firstUserMessage}}".
+
+What is the primary goal for this analysis? Ask clarifying questions if needed. 

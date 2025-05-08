@@ -1,0 +1,7 @@
+Based on the following conversation history: {{history}} and the context of files: [{{fileList}}], generate a final analysis summary for the user. The summary should include (if possible based on the conversation):
+- Identified assumptions
+- Identified main components involved
+- Discussed alternatives with tradeoffs
+- Summary of design decisions reached and why
+- A list of any open questions remaining.
+Provide only the summary content. 

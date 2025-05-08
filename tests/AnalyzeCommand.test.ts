@@ -10,6 +10,7 @@ import { MemoryService } from '../src/memory/MemoryService';
 import * as utils from '../src/utils';
 import { StateSnapshot } from '@langchain/langgraph';
 import * as analyzeCmd from '../src/commands/analyze';
+import { PromptService } from '../src/services/PromptService';
 
 // Define mockMemoryServiceInstance at a higher scope
 let mockMemoryServiceInstance: MemoryService;
@@ -204,7 +205,8 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
       const input: Input = { userInput: 'test' };
       const config = { configurable: { thread_id: 'test-id' } };
 
-      const result = await analyzeCmd.runGraph(input, config);
+      const promptService = new PromptService();
+      const result = await analyzeCmd.runGraph(input, config, promptService);
 
       expect(result).to.deep.equal({ interrupted: false, agentQuery: '' });
       expect(streamStub.calledOnceWith(input, config)).to.be.true;
@@ -222,7 +224,8 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
       const input: Input = { userInput: 'test' }; // Use directly imported Input type
       const config = { configurable: { thread_id: 'test-id' } };
 
-      const result = await analyzeCmd.runGraph(input, config);
+      const promptService = new PromptService();
+      const result = await analyzeCmd.runGraph(input, config, promptService);
 
       expect(result).to.deep.equal({ interrupted: true, agentQuery: interruptQuery });
       expect(streamStub.calledOnceWith(input, config)).to.be.true;
@@ -238,7 +241,8 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
         const input: Input = { userInput: 'test' };
         const config = { configurable: { thread_id: 'test-id' } };
   
-        const result = await analyzeCmd.runGraph(input, config);
+        const promptService = new PromptService();
+        const result = await analyzeCmd.runGraph(input, config, promptService);
   
         expect(result).to.deep.equal({ interrupted: true, agentQuery: 'Agent needs input.' }); 
       });
@@ -250,8 +254,9 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
       const input: Input = { userInput: 'test' };
       const config = { configurable: { thread_id: 'test-id' } };
 
+      const promptService = new PromptService();
       try {
-        await analyzeCmd.runGraph(input, config);
+        await analyzeCmd.runGraph(input, config, promptService);
         expect.fail('runGraph should have thrown an error');
       } catch (error) {
         expect(error).to.equal(streamError);
@@ -282,6 +287,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
         const result = await analyzeCmd.analysisIteration(
             initialInput as Input,
             config,
+            new PromptService(),
             mockRunGraph,
             mockPrompt
         );
@@ -305,6 +311,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
         const result = await analyzeCmd.analysisIteration(
             initialInput as Input,
             config,
+            new PromptService(),
             mockRunGraph,
             mockPrompt
         );
@@ -327,7 +334,8 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
         const result = await analyzeCmd.analysisIteration(
             initialInput as Input,
             config,
-            mockRunGraph,
+            new PromptService(),
+            mockRunGraph, 
             mockPrompt
         );
 
@@ -477,7 +485,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
             const input = { userInput: 'test' };
             const config = { configurable: { thread_id: 'graph-thread' } };
 
-            const result = await analyzeCmd.runGraph(input, config);
+            const result = await analyzeCmd.runGraph(input, config, new PromptService());
 
             expect(mockStream.calledOnceWith(input, config)).to.be.true;
             expect(result.interrupted).to.be.false;
@@ -499,7 +507,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
             const input = { userInput: 'test' };
             const config = { configurable: { thread_id: 'graph-interrupt-thread' } };
 
-            const result = await analyzeCmd.runGraph(input, config);
+            const result = await analyzeCmd.runGraph(input, config, new PromptService());
 
             expect(mockStream.calledOnceWith(input, config)).to.be.true;
             expect(result.interrupted).to.be.true;
@@ -515,7 +523,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
             };
             mockStream.resolves(mockAgentStream);
 
-            const result = await analyzeCmd.runGraph({}, {});
+            const result = await analyzeCmd.runGraph({}, {configurable: {thread_id: 'test-id'}}, new PromptService());
 
             expect(result.interrupted).to.be.true;
             expect(result.agentQuery).to.equal('Agent needs input.');
@@ -528,7 +536,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
                 }
             };
             mockStream.resolves(mockAgentStream);
-            const result = await analyzeCmd.runGraph({}, {});
+            const result = await analyzeCmd.runGraph({}, {configurable: {thread_id: 'test-id'}}, new PromptService());
             expect(result.interrupted).to.be.true;
             expect(result.agentQuery).to.equal('Agent needs input.');
         });
@@ -540,7 +548,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
                 }
             };
             mockStream.resolves(mockAgentStream);
-            const result = await analyzeCmd.runGraph({}, {});
+            const result = await analyzeCmd.runGraph({}, {configurable: {thread_id: 'test-id'}}, new PromptService());
             expect(result.interrupted).to.be.true;
             expect(result.agentQuery).to.equal('Agent needs input.');
         });
@@ -554,7 +562,7 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
             const config = { configurable: { thread_id: 'graph-fail-thread' } };
 
             try {
-                await analyzeCmd.runGraph(input, config);
+                await analyzeCmd.runGraph(input, config, new PromptService());
                 expect.fail('runGraph should have thrown');
             } catch (error: any) {
                 expect(error).to.equal(streamError);

@@ -6,6 +6,7 @@ import { DEFAULT_MODEL_NAME } from './agents/llmConstants';
 import { dbg, say } from './utils';
 import { runAnalysis } from './commands/analyze';
 import { runAsk } from './commands/ask';
+import { PromptService } from './services/PromptService';
 
 
 const ANALYSIS_ERROR = 1;
@@ -29,6 +30,7 @@ async function main() {
     .description('Archie - AI Architecture Assistant (CLI Mode)')
     .option('--memory-file <path>', 'Path to the memory JSON file', './memory.json')
     .option('--model <name>', 'Specify the OpenAI model to use', DEFAULT_MODEL_NAME)
+    .option('--prompts-config <path>', 'Path to the prompts configuration JSON file')
     .enablePositionalOptions(); // Recommended when using subcommands with global options
 
   // Retrieve global options early (for use in command actions)
@@ -36,9 +38,16 @@ async function main() {
   const globalOptions = program.opts();
   const memoryFilePath = path.resolve(globalOptions.memoryFile);
   const modelName = globalOptions.model;
+  const promptsConfigPath = globalOptions.promptsConfig;
 
   dbg(`Using memory file: ${memoryFilePath}`);
   say(`Using model: ${modelName}`);
+  if (promptsConfigPath) {
+    dbg(`Using prompts configuration file: ${path.resolve(promptsConfigPath)}`);
+  }
+
+  // Instantiate PromptService
+  const promptService = new PromptService(promptsConfigPath);
 
   // Load memory before parsing/executing commands
   await memoryService.loadMemory(memoryFilePath);
@@ -56,7 +65,7 @@ async function main() {
         dbg(`Running analysis with query: "${options.query}"`);
         dbg(`Input directory: ${options.inputs}`);
         // Call handler with specific args + global modelName & memoryService
-        await runAnalysis(options.query, options.inputs, modelName, memoryService);
+        await runAnalysis(options.query, options.inputs, modelName, memoryService, promptService);
         dbg("Analysis command finished successfully.");
       } catch (error) {
         dbg(`Analysis command failed: ${error}`);
@@ -74,7 +83,7 @@ async function main() {
       try {
         dbg(`Sending to agent: "${inputText}"`);
         // Call handler with specific args + global modelName & memoryService
-        await runAsk(inputText, modelName, memoryService);
+        await runAsk(inputText, modelName, memoryService, promptService);
         dbg("Ask command finished successfully.");
       } catch (error) {
         dbg(`Ask command failed: ${error}`);

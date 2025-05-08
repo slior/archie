@@ -4,15 +4,17 @@ import * as path from 'path';
 import inquirer from 'inquirer';
 import { app as agentApp, AppState } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService';
-import { dbg, say, newGraphConfig } from '../utils';
+import { PromptService } from '../services/PromptService';
+import { dbg, say, newGraphConfig, AppRunnableConfig } from '../utils';
 // Define types needed within this command module
 export type Input = Partial<AppState> | Command;
 type ResolveFn = (...paths: string[]) => string;
-type RunGraphFn = typeof runGraph;
+type RunGraphFn = (currentInput: Input, config: any, promptService: PromptService) => Promise<{ interrupted: boolean, agentQuery: string }>;
 type PromptFn = (questions: any[]) => Promise<any>;
 type AnalysisIterationFn = (
     currentInput: Input,
     config: any,
+    promptService: PromptService,
     runGraphFn?: RunGraphFn,
     promptFn?: PromptFn
 ) => Promise<{ isDone: boolean, newInput: Input }>;
@@ -33,6 +35,7 @@ type BasicReadFileFn = (path: string, encoding: string) => Promise<string>;
  * @param inputsDir An array of input file paths for analysis context.
  * @param modelName The AI model name to use.
  * @param memoryService The memory service instance (currently unused here, but kept for potential future use).
+ * @param promptService The prompt service instance (currently unused here, but kept for potential future use).
  * @param readFilesFn Injected dependency for reading files.
  * @param newGraphConfigFn Injected dependency for creating graph config.
  * @param analysisIterationFn Injected dependency for handling analysis loop.
@@ -46,6 +49,7 @@ export async function runAnalysis(
     inputsDir: string,
     modelName: string,
     memoryService: MemoryService, // Keep signature consistent, though save is handled in main
+    promptService: PromptService, // Added promptService
     // Injected Dependencies for testability
     readFilesFn: ReadFilesFn = readFiles,
     newGraphConfigFn: typeof newGraphConfig = newGraphConfig,
@@ -83,7 +87,7 @@ export async function runAnalysis(
     let currentInput: Input = initialAppState;
     let analysisDone = false;
     while (!analysisDone) {
-        const { isDone, newInput } = await analysisIterationFn(currentInput, config);
+        const { isDone, newInput } = await analysisIterationFn(currentInput, config, promptService);
         currentInput = newInput;
         analysisDone = isDone;
     }
@@ -211,6 +215,7 @@ export async function persistFinalOutput(
  *
  * @param currentInput - The current Input object containing the analysis state/command
  * @param config - Configuration object containing thread ID and other settings
+ * @param promptService - The prompt service instance (currently unused here, but kept for potential future use)
  * @param runGraphFn - Function to execute the agent graph (defaults to runGraph)
  * @param promptFn - Function to prompt for user input (defaults to inquirer.prompt)
  * @returns Promise containing:
@@ -220,12 +225,13 @@ export async function persistFinalOutput(
 export async function analysisIteration(
     currentInput: Input,
     config: any,
+    promptService: PromptService,
     runGraphFn: RunGraphFn = runGraph,
     promptFn: PromptFn = inquirer.prompt
 ): Promise<{ isDone: boolean, newInput: Input }> {
     dbg(`Running graph iteration on thread: ${config.configurable.thread_id}`);
     
-    const { interrupted, agentQuery } = await runGraphFn(currentInput, config);
+    const { interrupted, agentQuery } = await runGraphFn(currentInput, config, promptService);
     let analysisDone = false;
     let nextInput = currentInput;
     
@@ -255,20 +261,30 @@ export async function analysisIteration(
  *
  * @param currentInput - The current Input object containing the analysis state/command
  * @param config - Configuration object containing thread ID and other settings
+ * @param promptService - The prompt service instance (currently unused here, but kept for potential future use)
  * @returns Promise containing:
  *          - interrupted: boolean indicating if agent requested user input
  *          - agentQuery: string containing the agent's question if interrupted
  * @throws Error if the agent graph execution fails
  */
-export async function runGraph(currentInput: Input, config: any): Promise<{ interrupted: boolean, agentQuery: string }> {
+export async function runGraph(currentInput: Input, config: AppRunnableConfig, promptService: PromptService): Promise<{ interrupted: boolean, agentQuery: string }> {
     let stream;
     let agentQuery = "";
     let interrupted = false;
 
     try {
         dbg("Invoking agent graph...");
-        stream = await agentApp.stream(currentInput, config);
+        const fullConfig = {
+            ...config,
+            configurable: {
+                ...config.configurable,
+                promptService: promptService,
+            },
+        };
 
+        config.configurable.promptService = promptService;
+        // stream = await agentApp.stream(currentInput, fullConfig);
+        stream = await agentApp.stream(currentInput, config);
         for await (const chunk of stream) {
             
             if (chunk.__interrupt__) {
