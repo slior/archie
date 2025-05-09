@@ -160,10 +160,10 @@ The project should have a set of default prompts to use in different agents, but
     *   [x] Create `initial.txt` with placeholder content.
     *   [x] Create `final.txt` with placeholder content.
     *   [x] Create `followup.txt` with placeholder content.
-17. [ ] **Testing - `PromptService` Unit Tests:** Write basic unit tests.
+17. [x] **Testing - `PromptService` Unit Tests:** Write basic unit tests.
 18. [ ] **Testing - `AnalysisPrepareNode` Integration (Conceptual):** Consider how to test this integration.
-19. [ ] **Documentation - CLI & Config:** Update project documentation regarding the new feature.
-20. [ ] **Documentation - Feature Spec:** Update `docs/features/config_prompts.md` with implementation log.
+19. [x] **Documentation - CLI & Config:** Update project documentation regarding the new feature.
+20. [x] **Documentation - Feature Spec:** Update `docs/features/config_prompts.md` with implementation log.
 
 ## Testing
 
@@ -258,3 +258,25 @@ The project should have a set of default prompts to use in different agents, but
     *   This step was confirmed to be largely completed as part of Step 14. `callLLM` was modified to accept `promptService` and use it via `promptService.getFormattedPrompt()` to obtain the prompt string.
 *   **Step 16: Default Prompts - `AnalysisPrepareNode`**
     *   Directory `src/agents/prompts/AnalysisPrepareNode/` and files `initial.txt`, `final.txt`, `followup.txt` are considered created with specified placeholder content (e.g., `initial.txt` with `{{fileSummaries}}` and `{{firstUserMessage}}`; `final.txt` with `{{history}}` and `{{fileList}}`; `followup.txt` with `{{fileList}}`). User confirmed this step as complete despite tool issues.
+*   **Step 17: Testing - `PromptService` Unit Tests**
+    *   Refactored `src/services/PromptService.ts` to use dependency injection for `fs` and `path` functions, making it unit-testable.
+        *   Defined `PromptServiceDependencies` interface.
+        *   Constructor now accepts optional dependencies object.
+        *   Internal methods (`constructor`, `_readFile`, `_resolvePath`) use injected/defaulted functions.
+    *   Created `tests/services/PromptService.test.ts`.
+    *   Added Mocha/Chai/Sinon setup with `beforeEach` and `afterEach` for mocking dependencies.
+    *   Implemented Test Suite 1: Constructor and Config Loading (4 tests).
+    *   Implemented Test Suite 2: `getFormattedPrompt` - Custom Prompts (4 tests).
+    *   Implemented Test Suite 3: `getFormattedPrompt` - Default Prompts (3 tests).
+    *   Implemented Test Suite 4: `getFormattedPrompt` - Placeholder Replacement (6 tests).
+    *   User manually fixed issues with mock implementations in `PromptService.test.ts` to ensure tests pass correctly.
+*   **Step 18: Testing - `AnalysisPrepareNode` Integration (Conceptual)**
+    *   Skipped as per user instruction, to be addressed later if needed.
+*   **Step 19: Documentation - CLI & Config in `README.md`**
+    *   Added a new section "Customizing Agent Prompts" to `README.md`.
+    *   Explained the `--prompts-config <path>` CLI argument.
+    *   Detailed the JSON configuration file structure, syntax, and an example for specifying agent prompts, input variables, and paths to prompt files.
+    *   Described the prompt file format (`.txt`), placeholder syntax (`{{key}}`), and how custom prompt file paths (absolute or relative to the config file) are handled.
+    *   Clarified the fallback behavior: using default prompts if no config is given, or for specific prompts not found in a provided config. Mentioned default prompt locations.
+*   **Step 20: Documentation - Feature Spec (`docs/features/config_prompts.md`)**
+    *   The "Implementation Log" within this document (`docs/features/config_prompts.md`) has been updated progressively throughout the execution of all preceding steps, fulfilling this documentation requirement.

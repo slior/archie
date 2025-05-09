@@ -124,3 +124,69 @@ For a deeper understanding of the internal workings, refer to the following docu
 *   [`docs/main_shell_flow.md`](docs/main_shell_flow.md): Describes the overall command-line execution flow, from parsing arguments with `commander` to command dispatch and memory handling.
 *   [`docs/analyze_flow.md`](docs/analyze_flow.md): Details the step-by-step execution of the `analyze` command, including file reading, the conversational loop, LangGraph interrupts (Human-in-the-Loop), state management, and final output generation.
 *   [`docs/agent_graph.md`](docs/agent_graph.md): Explains the structure, state, nodes, and conditional logic of the LangGraph agent graph used by the commands.
+
+## Customizing Agent Prompts
+
+Archie allows you to customize the prompts used by its AI agents. This enables fine-tuning agent behavior, language, and task focus without modifying the core code.
+
+### Command-Line Argument for Prompts Configuration
+
+To use custom prompts, you provide a JSON configuration file via the `--prompts-config` global option:
+
+```bash
+node dist/main.js --prompts-config ./my_prompts_config.json analyze --query "..." --inputs ./src
+# or using ts-node
+npm run start -- --prompts-config ./my_prompts_config.json ask "..."
+```
+
+### Prompts Configuration File
+
+*   **Location:** You can place your prompt configuration JSON file anywhere accessible by the application. The path to this file is given via the `--prompts-config` argument.
+*   **Syntax:** The file must be in JSON format.
+*   **Structure:** The configuration file groups prompts by the agent that uses them, and then by a specific prompt key (identifier) for that agent.
+
+    ```json
+    {
+        "prompts": {
+            "AgentName1": {
+                "promptKey1_1": {
+                    "inputs": ["context_var1", "context_var2"],
+                    "path": "path/to/your/custom_prompt1_1.txt"
+                },
+                "promptKey1_2": {
+                    "inputs": [],
+                    "path": "/absolute/path/to/custom_prompt1_2.txt"
+                }
+            },
+            "AgentName2": {
+                "promptKey2_1": {
+                    "inputs": ["some_other_var"],
+                    "path": "../relative/path/from/config/file/custom_prompt2_1.txt"
+                }
+            }
+        }
+    }
+    ```
+    *   `"prompts"`: The root object.
+    *   `"AgentName1"`, `"AgentName2"`: Keys representing the agent using the prompts (e.g., `"AnalysisPrepareNode"`).
+    *   `"promptKey1_1"`, etc.: Keys identifying a specific prompt for that agent (e.g., `"initial"`, `"final"`, `"followup"` for `AnalysisPrepareNode`).
+    *   `"inputs"`: An array of strings. These are the names of the context variables (placeholders) that your custom prompt text expects. This is primarily for documentation and to help you design your prompts.
+    *   `"path"`: The file path to your custom prompt text file.
+
+### Custom Prompt File Format and Location
+
+*   **Format:** Custom prompt files should be plain text (`.txt`).
+*   **Placeholders:** Inside your prompt text, you can use placeholders with double curly braces, like `{{placeholder_name}}`. These will be replaced with actual values from the application state at runtime.
+    *   For example, a prompt for `AnalysisPrepareNode` with key `initial` might use `{{fileSummaries}}` and `{{firstUserMessage}}`.
+*   **Location:** You can store your custom `.txt` prompt files anywhere on your filesystem that the Archie application can read.
+*   **Path Configuration:** The `"path"` value in your JSON configuration:
+    *   Can be an **absolute path** (e.g., `"/opt/archie_prompts/my_custom_initial.txt"`).
+    *   Can be a **relative path** (e.g., `"./my_prompts/initial.txt"` or `"../common_prompts/shared_intro.txt"`). Relative paths are resolved from the directory where your JSON prompt configuration file is located.
+
+### Fallback Behavior
+
+*   **No Config File:** If you do not provide the `--prompts-config` argument, Archie will use its default, built-in prompts for all agents and operations.
+*   **Partial Configuration:** If you provide a configuration file but do not specify an override for every possible agent or prompt key, Archie will:
+    *   Use your custom prompt if an entry for a specific `AgentName` and `promptKey` is found in your configuration.
+    *   Fall back to the default built-in prompt if the specific `AgentName` or `promptKey` is not found in your configuration.
+*   **Default Prompt Locations:** The default prompts are located within the project structure, typically under `src/agents/prompts/<AgentName>/<promptKey>.txt` (e.g., `src/agents/prompts/AnalysisPrepareNode/initial.txt`).

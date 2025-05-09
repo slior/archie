@@ -2,21 +2,14 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { FullPromptsConfig } from './promptTypes';
 
-// --- Type Definitions ---
-// export interface PromptConfigEntry {
-//     inputs: string[];
-//     path: string;
-// }
-
-// export interface AgentPromptsConfig {
-//     [promptKey: string]: PromptConfigEntry;
-// }
-
-// export interface FullPromptsConfig {
-//     prompts: {
-//         [agentName: string]: AgentPromptsConfig;
-//     };
-// }
+export interface PromptServiceDependencies {
+    readFileFn?: (path: string, encoding: BufferEncoding) => Promise<string>;
+    resolvePathFn?: (...paths: string[]) => string;
+    dirnameFn?: (p: string) => string;
+    isAbsoluteFn?: (p: string) => boolean;
+    // We don't explicitly mock process.cwd() here as path.resolve handles it implicitly
+    // when its first argument isn't absolute and no other base is effectively given.
+}
 
 // --- PromptService Class ---
 export class PromptService {
@@ -24,10 +17,22 @@ export class PromptService {
     private readonly configFilePath?: string;
     private readonly configDir?: string;
 
-    constructor(configFilePath?: string) {
+    // Store injected dependencies or defaults
+    private readonly readFileFn: (path: string, encoding: BufferEncoding) => Promise<string>;
+    private readonly resolvePathFn: (...paths: string[]) => string;
+    private readonly dirnameFn: (p: string) => string;
+    private readonly isAbsoluteFn: (p: string) => boolean;
+
+    constructor(configFilePath?: string, deps?: PromptServiceDependencies) {
+        this.readFileFn = deps?.readFileFn || fs.readFile;
+        this.resolvePathFn = deps?.resolvePathFn || path.resolve;
+        this.dirnameFn = deps?.dirnameFn || path.dirname;
+        this.isAbsoluteFn = deps?.isAbsoluteFn || path.isAbsolute;
+
         if (configFilePath) {
-            this.configFilePath = path.resolve(configFilePath);
-            this.configDir = path.dirname(this.configFilePath);
+            // Use injected dependencies for path operations
+            this.configFilePath = this.resolvePathFn(configFilePath);
+            this.configDir = this.dirnameFn(this.configFilePath);
         } else {
             this.configFilePath = undefined;
             this.configDir = undefined;
@@ -37,7 +42,7 @@ export class PromptService {
     private async _ensureConfigLoaded(): Promise<void> {
         if (this.configFilePath && !this.loadedConfig) {
             try {
-                const fileContent = await this._readFile(this.configFilePath);
+                const fileContent = await this._readFile(this.configFilePath); // Will use this.readFileFn via _readFile
                 this.loadedConfig = JSON.parse(fileContent) as FullPromptsConfig;
             } catch (error: any) {
                 // Catch errors from _readFile (e.g., file not found) and JSON.parse (e.g., malformed JSON)
@@ -54,21 +59,20 @@ export class PromptService {
         await this._ensureConfigLoaded();
         
         let promptText: string = ''; // Initialize to empty, will be set by custom or default logic
-        // let promptInputs: string[] = []; // As per plan, though might not be used if direct replacement occurs
 
         const customPromptConfig = this.loadedConfig?.prompts?.[agentName]?.[promptKey];
 
         if (customPromptConfig) {
-            const customPath = this._resolvePath(customPromptConfig.path);
+            const customPath = this._resolvePath(customPromptConfig.path); // Will use this.resolvePathFn, this.isAbsoluteFn via _resolvePath
             try {
-                promptText = await this._readFile(customPath);
-                // promptInputs = customPromptConfig.inputs; // Store if validation against context keys is needed later
+                promptText = await this._readFile(customPath); // Will use this.readFileFn via _readFile
             } catch (error: any) {
                 throw new Error(`Error loading custom prompt file ${customPath} for agent ${agentName}, prompt ${promptKey}. Original error: ${error.message}`);
             }
-        } else {
-            // Default prompt logic
+        } else { // No custom prompt found, use default.
+            
             const defaultPromptPath = `src/agents/prompts/${agentName}/${promptKey}.txt`;
+            
             const resolvedDefaultPath = this._resolvePath(defaultPromptPath);
             try {
                 promptText = await this._readFile(resolvedDefaultPath);
@@ -77,10 +81,13 @@ export class PromptService {
             }
         }
 
+        if (!promptText) {
+            throw new Error(`Failed to load prompt for agent ${agentName}, prompt ${promptKey}.`);
+        }
+
         // Perform Replacement
         for (const key in context) {
             if (Object.prototype.hasOwnProperty.call(context, key)) {
-                const placeholder = `{{${key}}}`;
                 // Using a RegExp for global replacement. Escape special characters in the key.
                 const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 const regex = new RegExp(`{{${escapedKey}}}`, 'g');
@@ -93,25 +100,24 @@ export class PromptService {
 
     private async _readFile(filePath: string): Promise<string> {
         try {
-            return await fs.readFile(filePath, 'utf-8');
+            return await this.readFileFn(filePath, 'utf-8');
         } catch (error: any) {
-            // Re-throw to be caught by _ensureConfigLoaded, which adds more context
             throw new Error(`Reading file ${filePath} failed: ${error.message}`);
         }
     }
 
     private _resolvePath(promptPath: string): string {
-        if (path.isAbsolute(promptPath)) {
+        if (this.isAbsoluteFn(promptPath)) {
             return promptPath;
         }
         // If configDir is set (meaning a config file was loaded) and promptPath is relative,
         // resolve relative to the config file's directory.
         if (this.configDir) {
-            return path.resolve(this.configDir, promptPath);
+            return this.resolvePathFn(this.configDir, promptPath);
         }
         // Otherwise (no config file, or promptPath is still relative for some reason),
         // resolve relative to the project root (current working directory).
         // Assuming process.cwd() is the project root for default prompts or improperly configured relative paths.
-        return path.resolve(process.cwd(), promptPath);
+        return this.resolvePathFn(promptPath);
     }
 }
