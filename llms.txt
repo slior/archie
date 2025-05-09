@@ -1,0 +1,18 @@
+# Archie
+
+> Archie is an AI assistant for software architecture tasks, focusing on analysis, design, and communication. It utilizes AI agents, a memory service for persistence, and integrates with Large Language Models (LLMs) to process user queries and generate architectural insights.
+
+Archie is designed to streamline software architecture workflows by providing intelligent assistance for analyzing requirements, evaluating design options, and documenting decisions. Its general architecture involves a command-line interface (CLI) for user interaction, a core processing engine built with LangGraphJS to manage conversational agent flows, and modules for handling specific commands like `analyze` and `ask`. Configuration options allow users to specify LLM models and memory file locations.
+
+## Existing functionality and configuration
+
+- [CLI Interface (no_shell.md)](./docs/features/no_shell.md): Archie operates via direct command-line execution for commands like `analyze` and `ask`.
+- [Configurable Prompts (config_prompts.md)](./docs/features/config_prompts.md): Users can customize prompts used by the AI agents.
+- [Configurable AI Model (configurable_model.md)](./docs/features/configurable_model.md): The LLM used by Archie can be configured.
+- [Initial Project Specification (initial_spec.md)](./docs/initial_spec.md): Provides an overview of the project's goals and scope.
+
+## Main flows and agent graph
+
+- [Analysis Flow (analyze_flow.md)](./docs/analyze_flow.md): Describes the detailed workflow for the `analyze` command, involving multi-turn dialogue and solution approval.
+- [Main Interaction Flow (main_shell_flow.md)](./docs/main_shell_flow.md): Outlines the primary interaction patterns and command handling.
+- [Agent Graph (agent_graph.md)](./docs/agent_graph.md): Details the structure and states of the LangGraphJS agent graph used for managing conversations. 
