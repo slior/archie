@@ -186,7 +186,10 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             mockPersistOutput, 
         );
 
-        expect(mockReadFiles.calledOnceWith('./data')).to.be.true;
+        // expect(mockReadFiles.calledOnceWith('./data')).to.be.true;
+        expect(mockAgentAppStream.firstCall.args[0]).to.deep.include({ 
+            inputDirectoryPath: args[3] // which is './data'
+        });
         expect(mockAgentAppStream.calledTwice).to.be.true;
         // First call to stream/runGraph has initial state with specific model
         expect(mockAgentAppStream.firstCall.args[0]).to.deep.include({ modelName: specificModel });

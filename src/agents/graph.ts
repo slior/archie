@@ -2,12 +2,14 @@ import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { echoAgentNode } from "./EchoAgentNode";
 import { analysisPrepareNode } from "./AnalysisPrepareNode";
 import { analysisInterruptNode } from "./AnalysisInterruptNode";
+import { documentRetrievalNode } from "./DocumentRetrievalNode";
 import { dbg } from "../utils";
 
 // Define node names as constants
 const ECHO_AGENT = "echoAgent";
 const ANALYSIS_PREPARE = "analysisPrepare";
 const ANALYSIS_INTERRUPT = "analysisInterrupt";
+const DOCUMENT_RETRIEVAL = "documentRetrievalNode";
 
 /**
  * Represents the role of a participant in a conversation.
@@ -32,6 +34,12 @@ export interface AppState {
 
     /** Map of file paths to their contents for code analysis */
     fileContents: Record<string, string>;
+
+    /** Map of input file names to their contents, populated by DocumentRetrievalNode */
+    inputs: Record<string, string>;
+
+    /** The path to the directory from which to load input files */
+    inputDirectoryPath: string;
 
     /** Conversation history between user and agent during analysis */
     analysisHistory: Array<{ role: Role; content: string }>;
@@ -58,15 +66,18 @@ const workflow = new StateGraph<AppState>({
             userInput: { value: (currentState, update) => update !== undefined && update !== null ? update : currentState, default: () => "" },   
             response: { value: (x, y) => y, default: () => "" },                                        // Takes new response (used by echo)
             fileContents: { value: (x, y) => y ?? x, default: () => ({}) },                             // Persist, allow override
+            inputs: { value: (x, y) => y ?? x, default: () => ({}) }, // Persist, allow override
             analysisHistory: { value: (x, y) => (x || []).concat(y || []), default: () => ([]) },       // Append new messages
             analysisOutput: { value: (x, y) => y, default: () => "" },                                  // Takes new output
             currentAnalysisQuery: { value: (x, y) => y, default: () => "" },                            // Takes new query
             modelName: { value: (x, y) => y ?? x, default: () => "" }, // Item 18: Add channel config
+            inputDirectoryPath: { value: (x, y) => y ?? x, default: () => "" },
         },
     })
     .addNode(ECHO_AGENT, echoAgentNode)
     .addNode(ANALYSIS_PREPARE, analysisPrepareNode)
     .addNode(ANALYSIS_INTERRUPT, analysisInterruptNode)
+    .addNode(DOCUMENT_RETRIEVAL, documentRetrievalNode)
     
     // Make the conditional edge originate from START
     .addConditionalEdges(START, 
@@ -78,7 +89,7 @@ const workflow = new StateGraph<AppState>({
             // Determine initial routing based on input
             switch (true) {
                 case shouldTriggerAnalysis(userInput):
-                    nextNodeDecision = ANALYSIS_PREPARE;
+                    nextNodeDecision = DOCUMENT_RETRIEVAL;
                     break;
                 case userInput.startsWith(CMD_ECHO):
                     nextNodeDecision = ECHO_AGENT;
@@ -95,9 +106,11 @@ const workflow = new StateGraph<AppState>({
             // Mapping destinations
             [ECHO_AGENT]: ECHO_AGENT,
             [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
+            [DOCUMENT_RETRIEVAL]: DOCUMENT_RETRIEVAL,
             [END]: END,
         }
     )
+    .addEdge(DOCUMENT_RETRIEVAL, ANALYSIS_PREPARE)
     .addEdge(ECHO_AGENT, END)
     .addConditionalEdges(ANALYSIS_PREPARE,
         (state: AppState) => { // Keep synchronous 

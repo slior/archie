@@ -213,3 +213,41 @@ Yes, the approach should result in the `@memory_bank.md` file being populated wi
 *   **Did your approach fix the problem?**
     *   Yes, the links in `llms.txt` were reformatted to correctly follow the `[name](url): notes` standard.
     *   Yes, `memory_bank.md` was updated to log this correction. 
+
+## Title: Implement Separate Document Retrieval Agent (Node) - 15-05-2025 23:15
+
+*   **What did you discover about the project that you didn't know before?**
+    *   Reinforced understanding of the agent graph structure in `src/agents/graph.ts` and the `AppState`.
+    *   Gained insight into how `src/commands/analyze.ts` initializes and runs the analysis flow, specifically how it previously handled file reading directly.
+    *   The project uses a detailed planning and checklist approach for feature implementation, stored in feature-specific markdown files.
+    *   Learned about the interaction between `runAnalysis` and `initialAppState` regarding input parameters like `inputsDir`.
+    *   Confirmed that the `README.md` focuses on user-facing command usage and high-level developer documentation links, rather than internal implementation details of specific nodes like the new `DocumentRetrievalNode`.
+
+*   **What was the problem you faced in this chat interaction?**
+    *   The primary goal was to implement the feature described in `docs/features/separate_document_agent.md`: refactor the input file reading logic for the `analyze` command into a dedicated node within the existing LangGraph agent graph.
+    *   This involved modifying `AppState`, creating a new `DocumentRetrievalNode`, changing the graph structure to route `analyze` tasks through this new node, updating the `AnalysisPrepareNode` to consume inputs from the new state field, and adjusting `analyze.ts` to set up the graph call correctly.
+    *   A bug was identified by the user where `inputsDir` wasn't correctly passed to `initialAppState.inputDirectoryPath` in `analyze.ts`, which they fixed manually. This fix was crucial for the new node to function.
+    *   Updating all relevant documentation (`agent_graph.md`, `analyze_flow.md`) to reflect these significant architectural changes.
+
+*   **How did you approach the problem?**
+    *   Strictly followed the RIPER-5 operational protocol (Research, Innovate, Plan, Execute, Review) and the user's instruction to wait for explicit approval before proceeding with each step in Execute mode.
+    *   **Research:** Analyzed the feature specification, `llms.txt`, existing `analyze_flow.md`, `agent_graph.md`, `src/commands/analyze.ts`, and `src/agents/graph.ts` to understand the current state and requirements.
+    *   **Innovate:** Discussed adding the functionality as a new node in the existing graph (Approach 1), which was chosen by the user.
+    *   **Plan:** Created an exhaustive, step-by-step implementation checklist covering changes to `AppState`, creation of `DocumentRetrievalNode.ts`, graph modifications, updates to `AnalysisPrepareNode.ts` and `analyze.ts`, and documentation updates. This plan was persisted in `docs/features/separate_document_agent.md`.
+    *   **Execute:** Sequentially executed each item in the checklist, making code changes using the `edit_file` tool and awaiting user approval for each step. This included:
+        1.  Modifying `AppState` (`src/agents/graph.ts`) to add `inputs` and `inputDirectoryPath` fields and their channel configurations.
+        2.  Creating and implementing `src/agents/DocumentRetrievalNode.ts` to read `.txt` and `.md` files from `inputDirectoryPath`, store content in `inputs` using basenames as keys, and handle file read errors gracefully.
+        3.  Updating `src/agents/graph.ts` to import and add `documentRetrievalNode`, and rerouting the `analyze` flow: `START` -> `documentRetrievalNode` -> `analysisPrepareNode`.
+        4.  Modifying `src/agents/AnalysisPrepareNode.ts` to read from `state.inputs` instead of `state.fileContents` and adding error handling if `state.inputs` is missing/empty.
+        5.  Updating `src/commands/analyze.ts` to remove the direct `readFiles` call and to set `inputDirectoryPath` in the `initialAppState` (incorporating the user's manual fix for this part).
+        6.  Updating documentation: `docs/agent_graph.md` (AppState, Nodes, Mermaid diagram, Flow) and `docs/analyze_flow.md` (Overview, Detailed Steps, Sequence Diagram).
+    *   Recorded a user-identified bug fix related to `inputsDir` in the Implementation Log of the feature specification file.
+    *   **Review:** (Self-review during execution and at Step 21) Ensured changes aligned with the plan.
+
+*   **Did your approach fix the problem?**
+    *   Yes, the input file retrieval logic was successfully refactored into the `documentRetrievalNode` within the existing agent graph as per the feature specification and the agreed plan.
+    *   The `analyze` command now delegates file reading to this node.
+    *   Consuming nodes now use `state.inputs`.
+    *   Error handling for missing inputs is in place.
+    *   Relevant documentation has been updated to reflect the new architecture.
+    *   The user's manual bug fix for `inputDirectoryPath` was critical and acknowledged. 

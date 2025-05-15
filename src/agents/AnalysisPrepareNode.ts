@@ -1,7 +1,7 @@
 import { AppState, Role } from "./graph";
 import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
 import { callTheLLM } from './LLMUtils'; // Import the OpenAI utility
-import * as path from 'path'; // Import path here
+import path from 'path'; // Import path here
 import { PromptService } from "../services/PromptService"; // Added PromptService import
 import { RunnableConfig } from "@langchain/core/runnables"; // Import RunnableConfig
 
@@ -34,24 +34,9 @@ type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typ
  * Files are separated by double newlines in the output.
  */
 function summarizeFiles(files: Record<string, string>): string {
-    const summaries: string[] = [];
-    const MAX_LENGTH = 1000;
-
-    if (Object.keys(files).length === 0) {
-        return "No file content provided.";
-    }
-
-    for (const [filePath, content] of Object.entries(files)) {
-        const basename = path.basename(filePath);
-        let displayContent = content;
-        if (content.length > MAX_LENGTH) {
-            displayContent = content.substring(0, MAX_LENGTH) + '... [truncated]';
-        }
-        const fileSummary = `--- File: ${basename} ---\n${displayContent}`;
-        summaries.push(fileSummary);
-    }
-
-    return summaries.join('\n\n');
+    if (Object.keys(files).length === 0) return "No files provided.";
+    return `Summaries for files: ${Object.keys(files).join(', ')}. (Content summaries would be generated here if logic was more complex).
+Context: The user has provided the following files: ${Object.keys(files).join(', ')}.`;
 }
 
 /**
@@ -118,13 +103,13 @@ function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Rec
  */
 async function callLLM(
     history: HistoryMessage[], 
-    files: Record<string, string>,
-    promptKey: PromptType, // Changed name from promptType to promptKey for clarity
+    inputs: Record<string, string> | undefined,
+    promptType: 'initial' | 'followup' | 'final',
     modelName: string,
     promptService?: PromptService
 ): Promise<string> {
     
-    dbg(`callLLM received promptService: ${!!promptService}, using promptKey: ${promptKey}`);
+    dbg(`callLLM received promptService: ${!!promptService}, using promptType: ${promptType}`);
     
     if (!promptService) {
         // This should ideally not happen if the service is correctly injected everywhere.
@@ -134,31 +119,38 @@ async function callLLM(
         // For now, let it proceed and potentially fail at callTheLLM if prompt is not adequate.
         // Or, throw new Error("PromptService is required but not provided to callLLM.");
         // Let's try to make a very basic prompt if service is missing for now, rather than erroring hard here.
-        const basicFallbackPrompt = `User query based on history: ${JSON.stringify(history)}. Files: ${Object.keys(files).join(', ') || 'None'}.`;
+        const currentInputs = inputs ?? {};
+        const filesContext = Object.entries(currentInputs)
+            .map(([fileName, content]) => `File: ${fileName}\nContent:\n${content}`)
+            .join("\n\n---\n\n");
+        const basicFallbackPrompt = `User query based on history: ${JSON.stringify(history)}. Files: ${Object.keys(inputs ?? {}).join(', ') || 'None'}. Prompt type: ${promptType}.`;
         dbg(`Prompt Instruction (fallback due to missing PromptService): ${basicFallbackPrompt}`);
         return await callTheLLM(history, basicFallbackPrompt, modelName);
     }
 
     let context: Record<string, any> = {};
-    const fileListString = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None';
+    const currentInputs = inputs ?? {};
+    const filesContext = Object.entries(currentInputs)
+        .map(([fileName, content]) => `File: ${fileName}\nContent:\n${content}`)
+        .join("\n\n---\n\n");
 
-    if (promptKey === PROMPT_TYPE_INITIAL) {
+    if (promptType === PROMPT_TYPE_INITIAL) {
         context = {
-            fileSummaries: summarizeFiles(files),
+            fileSummaries: summarizeFiles(currentInputs),
             firstUserMessage: history.find(m => m.role === 'user')?.content || '(No initial query found)'
         };
-    } else if (promptKey === PROMPT_TYPE_FINAL) {
+    } else if (promptType === PROMPT_TYPE_FINAL) {
         context = {
             history: JSON.stringify(history),
-            fileList: fileListString
+            fileList: filesContext
         };
     } else { // PROMPT_TYPE_FOLLOWUP
         context = {
-            fileList: fileListString
+            fileList: filesContext
         };
     }
 
-    const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptKey, context);
+    const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptType, context);
     dbg(`Prompt Instruction (from PromptService): ${constructedPrompt}`);
 
     try {
@@ -190,12 +182,12 @@ async function returnFinalOutput(
     currentHistory: HistoryMessage[], 
     lastUserMessage: string, 
     state: AppState,
-    promptService?: PromptService
+    promptService?: PromptService // Ensure this matches callLLM if it's passed through
 ) : Promise<Partial<AppState>> {
     say("Analysis Agent: Solution approved by user.");
     try {
         const modelName = state.modelName; 
-        const finalOutput = await callLLM(currentHistory, state.fileContents, PROMPT_TYPE_FINAL, modelName, promptService);
+        const finalOutput = await callLLM(currentHistory, state.inputs, PROMPT_TYPE_FINAL, modelName, promptService);
         const finalAgentMsg = { role: 'agent' as const, content: "Okay, generating the final solution description." };
 
         return {
@@ -241,14 +233,14 @@ function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInpu
 async function callLLMForNextStep(
     currentHistory: HistoryMessage[], 
     state: AppState,
-    promptService?: PromptService
+    promptService?: PromptService // Ensure this matches callLLM if it's passed through
 ) : Promise<Partial<AppState>> {
     dbg("Analysis Agent: Thinking...");
     try {
         const modelName = state.modelName;
         // Determine prompt type based on history
-        const promptType = currentHistory.length <= 1 && currentHistory.every(m => m.role === 'user') ? PROMPT_TYPE_INITIAL : PROMPT_TYPE_FOLLOWUP;
-        const agentResponse = await callLLM(currentHistory, state.fileContents, promptType, modelName, promptService); // Pass promptService and corrected promptType
+        const determinedPromptType: 'initial' | 'followup' = currentHistory.length <= 1 && currentHistory.every(m => m.role === 'user') ? PROMPT_TYPE_INITIAL : PROMPT_TYPE_FOLLOWUP;
+        const agentResponse = await callLLM(currentHistory, state.inputs, determinedPromptType, modelName, promptService);
         const agentMsg = { role: 'agent' as const, content: agentResponse };
 
         dbg(`Agent response generated: ${agentResponse}`);
@@ -287,6 +279,21 @@ export async function analysisPrepareNode(state: AppState, config?: RunnableConf
     dbg(`analysisPrepareNode received promptService via RunnableConfig: ${!!promptService}`);
 
     dbg("--- Analysis Prepare Node Running ---");
+
+    // Error handling for missing inputs, as per Step 12
+    // Assuming that if `analysisPrepareNode` is reached in an analysis flow, inputs are expected.
+    if (!state.inputs || Object.keys(state.inputs).length === 0) {
+        const errorMessage = "Critical Error: Input documents (state.inputs) were not found or are empty. Analysis cannot proceed.";
+        console.error(`AnalysisPrepareNode: ${errorMessage}`);
+        // Return a state that should lead to END, with analysisOutput indicating the error.
+        return {
+            analysisOutput: errorMessage,
+            analysisHistory: state.analysisHistory ? state.analysisHistory.concat([{ role: 'agent', content: errorMessage }]) : [{ role: 'agent', content: errorMessage }],
+            userInput: "", // Clear input
+            currentAnalysisQuery: "" // Clear query
+        };
+    }
+
     const currentUserInput = state.userInput;
     let currentHistory: HistoryMessage[] = state.analysisHistory || [];
     

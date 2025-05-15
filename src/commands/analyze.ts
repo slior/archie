@@ -64,21 +64,21 @@ export async function runAnalysis(
         return;
     }
 
-    dbg(`Reading content for input files from: ${inputsDir}`);
-    const fileContents = await readFilesFn(inputsDir);
-    if (Object.keys(fileContents).length === 0) {
-        say("Error: Could not read any of the specified input files.");
-        return;
-    }
+    // dbg(`Reading content for input files from: ${inputsDir}`);
+    // const fileContents = await readFilesFn(inputsDir); // Ensure this line is removed or commented
+    // if (Object.keys(fileContents).length === 0) { // Ensure this block is removed or commented
+    //     say("Error: Could not read any of the specified input files.");
+    //     return;
+    // }
 
     const initialAppState: Partial<AppState> = {
         userInput: `analyze: ${query}`, // Prefix query for clarity in graph
-        fileContents: fileContents,
         analysisHistory: [],
         analysisOutput: "",
         currentAnalysisQuery: query, // Store the original query
         response: "",
         modelName: modelName,
+        inputDirectoryPath: inputsDir,
     };
     const config = newGraphConfigFn();
 
