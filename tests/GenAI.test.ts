@@ -23,7 +23,6 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
     let mockAgentAppInvoke: sinon.SinonStub;
     let mockAgentAppStream: sinon.SinonStub;
     let mockAgentAppGetState: sinon.SinonStub;
-    let mockReadFiles: sinon.SinonStub;
     let mockPersistOutput: sinon.SinonStub;
     let mockCommanderOpts: sinon.SinonStub;
     let mockCommanderParse: sinon.SinonStub;
@@ -42,7 +41,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         mockAgentAppInvoke = sinon.stub(agentApp, 'invoke');
         mockAgentAppStream = sinon.stub(agentApp, 'stream');
         mockAgentAppGetState = sinon.stub(agentApp, 'getState');
-        mockReadFiles = sinon.stub(analyzeCmd, 'readFiles');
+        // mockReadFiles = sinon.stub(analyzeCmd, 'readFiles');
         mockPersistOutput = sinon.stub(analyzeCmd, 'persistFinalOutput');
         mockOpenAICall = sinon.stub(LLMUtils, 'callTheLLM');
 
@@ -63,7 +62,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
         // Default mock implementations
         mockOpenAICall.resolves('Mock LLM response');
-        mockReadFiles.resolves({ 'input.md': 'test content' });
+        // mockReadFiles.resolves({ 'input.md': 'test content' });
         mockPersistOutput.resolves(undefined);
         const mockDefaultState: StateSnapshot = {
             values: { analysisOutput: 'Final Analysis' } as AppState,
@@ -107,7 +106,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         const testConfig = { configurable: { thread_id: 'test-thread-default' } };
 
         // Mock functions called BEFORE the target interaction
-        mockReadFiles.resolves({ 'test.md': 'content' }); // Called before initialAppState
+        // mockReadFiles.resolves({ 'test.md': 'content' }); // Called before initialAppState
         // sinon.stub(analyzeCmd, 'newGraphConfig').returns(testConfig); // Called before analysisIterationFn
         sinon.stub(utils, 'newGraphConfig').returns(testConfig);
 
@@ -127,7 +126,6 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             modelName, // Pass DEFAULT_MODEL
             mockMemoryServiceInstance,
             new PromptService(),
-            mockReadFiles, 
             utils.newGraphConfig, 
             mockAnalysisIteration, 
             mockAgentAppGetState, 
@@ -157,7 +155,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         const args = ['--query', 'test query', '--inputs', './data'];
         const modelName = specificModel; // This comes from main.ts
         const config = { configurable: { thread_id: 'test-thread-specific' } };
-        mockReadFiles.resolves({ 'test.md': 'content' }); // Called before initialAppState
+        // mockReadFiles.resolves({ 'test.md': 'content' }); // Called before initialAppState
         mockInquirerPrompt.resolves({ userResponse: 'User response' });
         mockAgentAppStream
              .onFirstCall().callsFake(async function*() {
@@ -177,7 +175,6 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             modelName, // Passed from main/shell
             new MemoryService(), 
             new PromptService(),
-            mockReadFiles, 
             utils.newGraphConfig, 
             analyzeCmd.analysisIteration, 
             mockAgentAppGetState, 

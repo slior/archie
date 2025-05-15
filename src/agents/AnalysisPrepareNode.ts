@@ -33,61 +33,17 @@ type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typ
  * 
  * Files are separated by double newlines in the output.
  */
-function summarizeFiles(files: Record<string, string>): string {
+export function summarizeFiles(files: Record<string, string>): string {
     if (Object.keys(files).length === 0) return "No files provided.";
-    return `Summaries for files: ${Object.keys(files).join(', ')}. (Content summaries would be generated here if logic was more complex).
-Context: The user has provided the following files: ${Object.keys(files).join(', ')}.`;
-}
 
-/**
- * Generates a prompt for the LLM based on the prompt type, conversation history, and available files.
- * 
- * @param promptType - The type of prompt to generate (initial, followup, or final)
- * @param history - Array of previous conversation messages between user and agent
- * @param files - Record of filenames and their contents that provide context
- * @returns A constructed prompt string appropriate for the given prompt type
- * 
- * The function handles three types of prompts:
- * - Initial: Creates a prompt to analyze the user's first query and understand analysis goals
- * - Followup: Creates a prompt to continue the analysis based on ongoing conversation
- * - Final: Creates a prompt to generate a comprehensive summary of the analysis
- * 
- * For initial prompts, it includes detailed file summaries.
- * For followup and final prompts, it includes file names for context.
- * The function uses debug logging to track prompt construction.
- */
-function getPrompt(promptType: PromptType, history: HistoryMessage[], files: Record<string, string>) : string
-{
-    dbg(`\n--- Constructing LLM Prompt (Type: ${promptType}) ---`);
-    let constructedPrompt: string;
-    // Define fileList here so it's available to all branches
-    const fileList = Object.keys(files).map(p => path.basename(p)).join(', ') || 'None';
+    const summaries = Object.entries(files).map(([filePath, content]) => {
+        const fileName = path.basename(filePath); // Extract filename
+        const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + "..." : content;
+        return `--- File: ${fileName} ---
+${truncatedContent}`;
+    });
 
-    // Use history directly (callLLM expects the full history)
-    // The prompt passed to callLLM is the specific instruction for *this* turn.
-
-    if (promptType === PROMPT_TYPE_INITIAL) {
-        const firstUserMessage = history.find(m => m.role === 'user')?.content || '(No initial query found)';
-        const fileSummaries = summarizeFiles(files); // Call the summarizer
-        // Use fileSummaries in the prompt instead of fileList
-        constructedPrompt = `Analyze the user query based on the following file summaries:\n\n${fileSummaries}\n\nUser's initial query: "${firstUserMessage}".\n\nWhat is the primary goal for this analysis? Ask clarifying questions if needed.`;
-    } else if (promptType === PROMPT_TYPE_FINAL) {
-        // Construct detailed final summary prompt (uses fileList for context)
-        constructedPrompt = `Based on the following conversation history: ${JSON.stringify(history)} and the context of files: [${fileList}], generate a final analysis summary for the user. The summary should include (if possible based on the conversation):
-        - Identified assumptions
-        - Identified main components involved
-        - Discussed alternatives with tradeoffs
-        - Summary of design decisions reached and why
-        - A list of any open questions remaining.
-        Provide only the summary content.`;
-    } else { // PROMPT_TYPE_FOLLOWUP
-        // For follow-up, the history contains the context. The prompt should guide the LLM on what to do next.
-        // We pass the full history to callLLM, and this prompt acts as the latest instruction.
-        // Uses fileList for context.
-        constructedPrompt = `Continue the analysis based on the latest user message in the history. Files provided: [${fileList}]. Ask further clarifying questions or provide analysis as appropriate.`;
-    }
-    dbg(`Constructed prompt:\n${constructedPrompt}`);
-    return constructedPrompt;
+    return summaries.join("\n\n");
 }
 
 

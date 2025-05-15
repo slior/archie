@@ -36,7 +36,6 @@ type BasicReadFileFn = (path: string, encoding: string) => Promise<string>;
  * @param modelName The AI model name to use.
  * @param memoryService The memory service instance (currently unused here, but kept for potential future use).
  * @param promptService The prompt service instance (currently unused here, but kept for potential future use).
- * @param readFilesFn Injected dependency for reading files.
  * @param newGraphConfigFn Injected dependency for creating graph config.
  * @param analysisIterationFn Injected dependency for handling analysis loop.
  * @param getStateFn Injected dependency for getting graph state.
@@ -51,7 +50,6 @@ export async function runAnalysis(
     memoryService: MemoryService, // Keep signature consistent, though save is handled in main
     promptService: PromptService, // Added promptService
     // Injected Dependencies for testability
-    readFilesFn: ReadFilesFn = readFiles,
     newGraphConfigFn: typeof newGraphConfig = newGraphConfig,
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
     getStateFn: GetStateFn = agentApp.getState.bind(agentApp),
@@ -63,13 +61,6 @@ export async function runAnalysis(
         say("Error: Analysis requires a query (--query) and a working directory (--inputs).");
         return;
     }
-
-    // dbg(`Reading content for input files from: ${inputsDir}`);
-    // const fileContents = await readFilesFn(inputsDir); // Ensure this line is removed or commented
-    // if (Object.keys(fileContents).length === 0) { // Ensure this block is removed or commented
-    //     say("Error: Could not read any of the specified input files.");
-    //     return;
-    // }
 
     const initialAppState: Partial<AppState> = {
         userInput: `analyze: ${query}`, // Prefix query for clarity in graph
@@ -101,49 +92,6 @@ export async function runAnalysis(
     await persistFinalOutputFn(finalOutput, inputsDir);
 
     dbg("runAnalysis completed.");
-}
-
-
-/**
- * Reads text and markdown files from a specified directory and returns their contents.
- * 
- * @param directoryPath - The path to the directory containing files to read
- * @param readFileFn - Function to read file contents (defaults to fs.promises.readFile)
- * @param resolveFn - Function to resolve file paths (defaults to path.resolve)
- * @param readdirFn - Function to read directory contents (defaults to fs.promises.readdir)
- * @returns Promise resolving to an object mapping file paths to their contents
- * @throws Error if the directory cannot be read or if there are errors reading individual files
- */
-export async function readFiles(
-    directoryPath: string,
-    readFileFn: BasicReadFileFn = fsPromises.readFile as BasicReadFileFn,
-    resolveFn: ResolveFn = path.resolve,
-    readdirFn: (path: string) => Promise<string[]> = fsPromises.readdir
-): Promise<Record<string, string>> {
-    const fileContents: Record<string, string> = {};
-    try {
-        const dirents = await readdirFn(directoryPath);
-        const filesToRead = dirents.filter(
-            (dirent) => dirent.endsWith('.txt') || dirent.endsWith('.md')
-        );
-
-        for (const filename of filesToRead) {
-            const resolvedPath = resolveFn(directoryPath, filename);
-            dbg(`Reading file: ${resolvedPath}`);
-            try {
-                 fileContents[resolvedPath] = await readFileFn(resolvedPath, 'utf-8');
-            } catch (readError) {
-                console.error(`Error reading file ${resolvedPath}:`, readError);
-                // Decide if one error should stop the whole process or just skip the file
-            }
-        }
-    } catch (error) {
-        console.error(`Error reading input directory ${directoryPath}:`, error);
-        throw error;
-    }
-    finally {
-        return fileContents;
-    }
 }
 
 /**
