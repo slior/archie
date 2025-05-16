@@ -71,17 +71,7 @@ async function callLLM(
         // This should ideally not happen if the service is correctly injected everywhere.
         // However, as a safeguard during transition or if a call path misses it:
         say("Warning: PromptService not available in callLLM. LLM call might fail or use basic prompts.");
-        // Fallback to a very basic instruction or throw an error specific to this missing service.
-        // For now, let it proceed and potentially fail at callTheLLM if prompt is not adequate.
-        // Or, throw new Error("PromptService is required but not provided to callLLM.");
-        // Let's try to make a very basic prompt if service is missing for now, rather than erroring hard here.
-        const currentInputs = inputs ?? {};
-        const filesContext = Object.entries(currentInputs)
-            .map(([fileName, content]) => `File: ${fileName}\nContent:\n${content}`)
-            .join("\n\n---\n\n");
-        const basicFallbackPrompt = `User query based on history: ${JSON.stringify(history)}. Files: ${Object.keys(inputs ?? {}).join(', ') || 'None'}. Prompt type: ${promptType}.`;
-        dbg(`Prompt Instruction (fallback due to missing PromptService): ${basicFallbackPrompt}`);
-        return await callTheLLM(history, basicFallbackPrompt, modelName);
+        throw new Error("PromptService is required but not provided to callLLM.");
     }
 
     let context: Record<string, any> = {};
@@ -107,7 +97,7 @@ async function callLLM(
     }
 
     const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptType, context);
-    dbg(`Prompt Instruction (from PromptService): ${constructedPrompt}`);
+    // dbg(`Prompt Instruction (from PromptService): ${constructedPrompt}`);
 
     try {
         return await callTheLLM(history, constructedPrompt, modelName);
@@ -199,7 +189,7 @@ async function callLLMForNextStep(
         const agentResponse = await callLLM(currentHistory, state.inputs, determinedPromptType, modelName, promptService);
         const agentMsg = { role: 'agent' as const, content: agentResponse };
 
-        dbg(`Agent response generated: ${agentResponse}`);
+        // dbg(`Agent response generated: ${agentResponse}`);
 
         // Prepare the state update to be returned for the interrupt node
         const stateUpdate: Partial<AppState> = {

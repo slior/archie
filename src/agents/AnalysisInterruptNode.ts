@@ -24,7 +24,7 @@ import { dbg } from "../utils"; // Corrected import path for dbg
 export async function analysisInterruptNode(state: AppState): Promise<Partial<AppState>> { // Change return type
     dbg("--- Analysis Interrupt Node Running ---");
     const queryToAsk = state.currentAnalysisQuery;
-    dbg(`Interrupting with query: ${queryToAsk}`);
+    // dbg(`Interrupting with query: ${queryToAsk}`);
 
     if (!queryToAsk) {
         dbg("AnalysisInterruptNode: No query found in state to ask the user.");

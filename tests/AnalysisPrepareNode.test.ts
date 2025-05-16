@@ -3,7 +3,11 @@ import { describe, it } from 'mocha';
 import { summarizeFiles } from '../src/agents/AnalysisPrepareNode';
 // path.basename is used by summarizeFiles, so its behavior is implicitly tested.
 
+
 describe('summarizeFiles from AnalysisPrepareNode', () => {
+
+    const FILE_SIZE_THRESHOLD = 1000;  
+
     it('should return "No files provided." for an empty input object', () => {
         expect(summarizeFiles({})).to.equal("No files provided.");
     });
@@ -15,21 +19,21 @@ describe('summarizeFiles from AnalysisPrepareNode', () => {
     });
 
     it('should correctly summarize and truncate a single file with content more than 1000 characters', () => {
-        const longContent = "a".repeat(1001);
+        const longContent = "a".repeat(FILE_SIZE_THRESHOLD + 1);
         const files = { "file2.txt": longContent };
-        const expectedTruncatedContent = "a".repeat(1000) + "...";
+        const expectedTruncatedContent = "a".repeat(FILE_SIZE_THRESHOLD) + "...";
         const expected = `--- File: file2.txt ---\n${expectedTruncatedContent}`;
         expect(summarizeFiles(files)).to.equal(expected);
     });
 
     it('should correctly summarize multiple files with mixed content lengths', () => {
-        const longContent = "b".repeat(1005);
+        const longContent = "b".repeat(FILE_SIZE_THRESHOLD + 1);
         const files = {
             "alpha.txt": "Content of alpha.",
             "beta/gamma.md": "Content of gamma, which is a bit longer.",
             "delta.log": longContent
         };
-        const expectedTruncatedLongContent = "b".repeat(1000) + "...";
+        const expectedTruncatedLongContent = "b".repeat(FILE_SIZE_THRESHOLD) + "...";
         const expected = `--- File: alpha.txt ---\nContent of alpha.
 
 --- File: gamma.md ---

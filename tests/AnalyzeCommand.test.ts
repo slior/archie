@@ -368,7 +368,6 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
             expect(mockStream.calledOnceWith(input, config)).to.be.true;
             expect(result.interrupted).to.be.true;
             expect(result.agentQuery).to.equal(interruptQuery);
-            expect((utils.dbg as sinon.SinonStub).calledWithMatch(interruptQuery)).to.be.true;
         });
 
          it('should handle interruption with default query if query field is missing', async () => {

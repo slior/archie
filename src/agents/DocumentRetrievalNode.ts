@@ -29,7 +29,7 @@ export async function documentRetrievalNode(state: AppState): Promise<Partial<Ap
             .map(dirent => dirent.name);
 
         if (filesToRead.length === 0) {
-            dbg(`DocumentRetrievalNode: No .txt or .md files found in ${inputDirectoryPath}`);
+            console.warn(`DocumentRetrievalNode: No .txt or .md files found in ${inputDirectoryPath}`);
         }
 
         for (const filename of filesToRead) {

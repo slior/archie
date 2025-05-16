@@ -84,8 +84,6 @@ export async function runAnalysis(
     }
 
     dbg("Analysis loop finished. Retrieving final output.");
-    // Determine output directory from the first input file's directory
-
 
     const finalOutput = await getFinalOutputFn(config, getStateFn);
     displayFinalOutputFn(finalOutput);
@@ -239,7 +237,7 @@ export async function runGraph(currentInput: Input, config: AppRunnableConfig, p
                 interrupted = true;
                 // Extract query from the first interrupt object's value
                 agentQuery = chunk.__interrupt__[0]?.value?.query || "Agent needs input.";
-                dbg(`agentQuery: ${agentQuery}`);
+                // dbg(`agentQuery: ${agentQuery}`);
                 break; // Exit inner loop to prompt user
             }
              // Consider logging other node outputs here if needed
@@ -248,8 +246,7 @@ export async function runGraph(currentInput: Input, config: AppRunnableConfig, p
 
     } catch (error) {
         console.error("Error executing agent graph:", error);
-        // Returning as non-interrupted might be misleading. Rethrowing might be better.
-         throw error; // Rethrow for now
+         throw error;
     }
 
     return { interrupted, agentQuery };
