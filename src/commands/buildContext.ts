@@ -1,13 +1,27 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
-import { app as agentApp, AppState } from '../agents/graph';
+import { app as agentApp, AppState, BUILD_CONTEXT_FLOW } from '../agents/graph';
 import { MemoryService } from '../memory/MemoryService';
 import { PromptService } from '../services/PromptService';
 import { dbg, say, newGraphConfig, AppRunnableConfig, persistOutput, createConfigWithPromptService } from '../utils';
 
-// Placeholder for runBuildContext function to be implemented in Step 11
-// export async function runBuildContext(...) { ... } 
 
+/**
+ * Runs the context building process for a given system.
+ * It initializes the application state, invokes the agent graph to process input documents
+ * and generate a context summary, and then persists this summary to a file.
+ *
+ * @param systemName The name of the system for which to build context. This is used in prompts and output filenames.
+ * @param inputsDir The path to the directory containing input documents (e.g., .txt, .md files) for context generation.
+ * @param modelName The identifier of the AI model to be used by the context building agent.
+ * @param memoryService The memory service instance. While not directly used for saving state within this function (as graph handles its own memory),
+ *                      it's included for consistency with other command runners and potential future use.
+ * @param promptService The service responsible for providing formatted prompts to the AI agents.
+ * @param newGraphConfigFn Injected dependency for creating a new graph configuration object. Defaults to `newGraphConfig`.
+ * @param persistOutputFn Injected dependency for persisting the generated context to a file. Defaults to `persistOutput`.
+ * @param createConfigFn Injected dependency for creating a runnable configuration that includes the prompt service. Defaults to `createConfigWithPromptService`.
+ * @returns A Promise that resolves when the context building process is complete, or if an error occurs.
+ */
 export async function runBuildContext(
     systemName: string,
     inputsDir: string,
@@ -16,7 +30,6 @@ export async function runBuildContext(
     promptService: PromptService,
     // Injected dependencies for testability
     newGraphConfigFn: typeof newGraphConfig = newGraphConfig,
-    // getGraphStateFn: (config: any) => Promise<{ values: Partial<AppState> }> = agentApp.getState.bind(agentApp), // Not needed for .invoke typically
     persistOutputFn: typeof persistOutput = persistOutput,
     createConfigFn: typeof createConfigWithPromptService = createConfigWithPromptService
 ) {
@@ -26,11 +39,11 @@ export async function runBuildContext(
     }
 
     const initialAppState: Partial<AppState> = {
-        userInput: `build_context: ${systemName}`, // For START node routing
+        userInput: `build context: ${systemName}`,
         inputDirectoryPath: inputsDir,
         systemName: systemName,
         modelName: modelName,
-        currentFlow: 'build_context', // Critical for routing after DocumentRetrievalNode
+        currentFlow: BUILD_CONTEXT_FLOW, // Critical for routing 
         // Initialize other relevant fields from AppState to defaults if necessary
         analysisHistory: [], // Ensure all AppState fields have initial values if non-optional in definition
         analysisOutput: "",

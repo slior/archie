@@ -1,5 +1,7 @@
 import path from 'path';
 
+
+const CONTENT_TRUNCATION_LIMIT = 1000;
 /**
  * Summarizes the contents of multiple files into a single formatted string.
  * 
@@ -19,7 +21,7 @@ export function summarizeFiles(files?: Record<string, string>): string {
 
     const summaries = Object.entries(files).map(([filePath, content]) => {
         const fileName = path.basename(filePath);
-        const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + "..." : content;
+        const truncatedContent = content.length > CONTENT_TRUNCATION_LIMIT ? content.substring(0, CONTENT_TRUNCATION_LIMIT) + "..." : content;
         return `--- File: ${fileName} ---
 ${truncatedContent}`;
     });

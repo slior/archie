@@ -27,7 +27,6 @@ export function newGraphConfig(): AppRunnableConfig {
     return { configurable };
 }
 
-// New persistOutput utility function
 /**
  * Persists the given content to a file in the specified directory with the specified filename.
  * 
@@ -52,7 +51,7 @@ export async function persistOutput(
         say(`Output saved to: ${outputPath}`);
     } catch (error) {
         console.error(`Error saving output to ${outputPath}:`, error);
-        throw error; // Re-throw the error
+        throw error;
     }
 }
 

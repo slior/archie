@@ -2,7 +2,7 @@ import { Command } from "@langchain/langgraph";
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import inquirer from 'inquirer';
-import { app as agentApp, AppState } from "../agents/graph";
+import { app as agentApp, AppState, ANALYZE_FLOW } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService';
 import { PromptService } from '../services/PromptService';
 import { dbg, say, newGraphConfig, AppRunnableConfig, persistOutput, createConfigWithPromptService } from '../utils';
@@ -70,7 +70,7 @@ export async function runAnalysis(
         response: "",
         modelName: modelName,
         inputDirectoryPath: inputsDir,
-        currentFlow: 'analyze',
+        currentFlow: ANALYZE_FLOW,
     };
     const config = newGraphConfigFn();
 

@@ -20,9 +20,12 @@ const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
  */
 export type Role = 'user' | 'agent';
 
+export const ANALYZE_FLOW = 'analyze';
+export const BUILD_CONTEXT_FLOW = 'build_context';
+export type Flow = typeof ANALYZE_FLOW | typeof BUILD_CONTEXT_FLOW; 
+
 const CMD_ECHO = "echo";
 
-// Define the state interface that will flow through the graph
 /**
  * Represents the core application state that flows through the agent graph.
  * This state is passed between nodes and updated during graph execution.
@@ -56,15 +59,18 @@ export interface AppState {
     modelName: string;
 
     // New fields for Context Building Flow
-    currentFlow?: 'analyze' | 'build_context' | null;
+    currentFlow?: Flow | null;
     systemName?: string;
     contextBuilderOutputContent?: string;
     contextBuilderOutputFileName?: string;
 }
 
-function shouldTriggerAnalysis(userInput: string): boolean {
-    const analysisKeywords = ["analyze", "analysis", "review requirement", "start analysis"];
-    return analysisKeywords.some(keyword => userInput.includes(keyword));
+function shouldTriggerAnalysis(state: AppState): boolean {
+    return state.currentFlow === ANALYZE_FLOW;
+}
+
+function shouldTriggerContextBuilding(state: AppState): boolean {
+    return state.currentFlow === BUILD_CONTEXT_FLOW;
 }
 
 // Define the channels for the graph state, specifying how they should be updated.
@@ -80,7 +86,7 @@ const channels = {
     modelName: { value: (x: string, y: string) => y ?? x, default: () => "" },
 
     // New channel configurations
-    currentFlow: { value: (x: 'analyze' | 'build_context' | null | undefined, y: 'analyze' | 'build_context' | null | undefined) => y !== undefined ? y : x, default: () => null },
+    currentFlow: { value: (x: Flow | null | undefined, y: Flow | null | undefined) => y !== undefined ? y : x, default: () => null },
     systemName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
     contextBuilderOutputContent: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
     contextBuilderOutputFileName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
@@ -101,11 +107,10 @@ const workflow = new StateGraph<AppState>({ channels })
             const userInput = state.userInput.toLowerCase();
             let nextNodeDecision: string;
 
-            // Determine initial routing based on input
-            if (userInput.startsWith("analyze:")) {
+            if (shouldTriggerAnalysis(state)) {
                 nextNodeDecision = DOCUMENT_RETRIEVAL;
             }
-            else if (userInput.startsWith("build_context:")) {
+            else if (shouldTriggerContextBuilding(state)) {
                 nextNodeDecision = DOCUMENT_RETRIEVAL;
             } else if (userInput.startsWith(CMD_ECHO)) {
                 nextNodeDecision = ECHO_AGENT;
@@ -125,16 +130,18 @@ const workflow = new StateGraph<AppState>({ channels })
     )
     .addConditionalEdges(DOCUMENT_RETRIEVAL, 
         (state: AppState) => {
-            if (state.currentFlow === 'analyze') {
-                dbg('Routing after Document Retrieval to Analysis Prepare');
-                return ANALYSIS_PREPARE;
-            } else if (state.currentFlow === 'build_context') {
-                dbg('Routing after Document Retrieval to Context Building Agent');
-                return CONTEXT_BUILDING_AGENT;
+            switch (state.currentFlow) {
+                case ANALYZE_FLOW:
+                    dbg('Routing after Document Retrieval to Analysis Prepare');
+                    return ANALYSIS_PREPARE;
+                case BUILD_CONTEXT_FLOW:
+                    dbg('Routing after Document Retrieval to Context Building Agent');
+                    return CONTEXT_BUILDING_AGENT;
+                default:
+                    console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
+                    dbg('Routing after Document Retrieval to END due to unknown flow.');
+                    return END; // Default to END if flow is not set or unknown
             }
-            console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
-            dbg('Routing after Document Retrieval to END due to unknown flow.');
-            return END; // Default to END if flow is not set or unknown
         },
         {
             [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
