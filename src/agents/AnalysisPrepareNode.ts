@@ -1,13 +1,11 @@
-import { AppState, Role, safeAppConfig } from "./graph";
-import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
+import { AppState, safeAppConfig } from "./graph";
+import { AppRunnableConfig, dbg, say } from "../utils";
 import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
-// import path from 'path'; // Import path here - path is no longer used in this file
+
 import { PromptService } from "../services/PromptService"; // Added PromptService import
 import { RunnableConfig } from "@langchain/core/runnables"; // Import RunnableConfig
 import { summarizeFiles } from './agentUtils'; // Import summarizeFiles from agentUtils
 
-// Define the type for history based on AppState Role
-// type HistoryMessage = { role: Role; content: string }; // Removed local definition
 
 const PROMPT_TYPE_INITIAL = 'initial';
 const PROMPT_TYPE_FOLLOWUP = 'followup';
@@ -18,34 +16,6 @@ const PROMPT_TYPE_FINAL = 'final';
  * - PROMPT_TYPE_FOLLOWUP: Used for continuing the conversation and gathering more details
  * - PROMPT_TYPE_FINAL: Used to generate the final analysis summary
  */
-type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typeof PROMPT_TYPE_FINAL;
-
-/**
- * Summarizes the contents of multiple files into a single formatted string.
- * 
- * @param files - An object mapping file paths to their contents
- * @returns A formatted string containing summaries of all files, with each file's content
- *          truncated to 1000 characters if needed. Returns "No file content provided" if
- *          the files object is empty.
- * 
- * Each file summary is formatted as:
- * --- File: filename.ext ---
- * [file contents]
- * 
- * Files are separated by double newlines in the output.
- */
-// export function summarizeFiles(files: Record<string, string>): string { // Moved to agentUtils.ts
-//     if (Object.keys(files).length === 0) return "No files provided.";
-// 
-//     const summaries = Object.entries(files).map(([filePath, content]) => {
-//         const fileName = path.basename(filePath); // Extract filename
-//         const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + "..." : content;
-//         return `--- File: ${fileName} ---
-// ${truncatedContent}`;
-//     });
-// 
-//     return summaries.join("\n\n");
-// }
 
 
 /**
@@ -156,11 +126,53 @@ async function returnFinalOutput(
     }
 }
 
+/**
+ * Checks if the user's message indicates they are done with the analysis.
+ * 
+ * This function looks for specific keywords in the user's message (case-insensitive)
+ * to determine if the user has approved the solution or wants to end the interaction.
+ *
+ * @param userMessage - The message string from the user.
+ * @returns `true` if the user's message contains a "done" (or other relevant) keyword, `false` otherwise.
+ *
+ * @example
+ * userIsDone("SOLUTION APPROVED, looks great!"); // true
+ * userIsDone("Okay bye for now."); // true
+ * userIsDone("What about this other file?"); // false
+ */
 function userIsDone(userMessage: string) : boolean {
     const doneKeywords = ["SOLUTION APPROVED", "DONE", "OKAY BYE"];
     return doneKeywords.some(keyword => userMessage.toUpperCase().includes(keyword));
 }
 
+/**
+ * Appends the user's input to the conversation history.
+ *
+ * If `currentUserInput` is provided, it's added as a new message with `role: 'user'`
+ * to the `currentHistory`. This function handles both initializing the history
+ * with the first user message and appending to an existing conversation.
+ *
+ * @param currentHistory - The current array of `HistoryMessage` objects.
+ * @param currentUserInput - The string input from the user. If empty or undefined,
+ *                           the history is returned unchanged.
+ * @returns A new `HistoryMessage` array with the user's input appended, or the
+ *          original `currentHistory` if `currentUserInput` was not provided.
+ *
+ * @example
+ * // Initial input
+ * addUserInputToHistory([], "Analyze my data.");
+ * // Returns: [{ role: 'user', content: "Analyze my data." }]
+ *
+ * // Follow-up input
+ * addUserInputToHistory(
+ *   [{ role: 'agent', content: "Which data?" }],
+ *   "The sales data."
+ * );
+ * // Returns: [
+ * //   { role: 'agent', content: "Which data?" },
+ * //   { role: 'user', content: "The sales data." }
+ * // ]
+ */
 function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInput: string) : HistoryMessage[]
 {
 
@@ -177,6 +189,22 @@ function addUserInputToHistory(currentHistory: HistoryMessage[], currentUserInpu
     return currentHistory;
 }
 
+/**
+ * Calls the LLM to determine the next step or question in the analysis conversation.
+ *
+ * This function orchestrates a call to the LLM using either an 'initial' or 'followup' prompt
+ * based on the current conversation history. It then updates the application state with the
+ * LLM's response, preparing for a potential user interrupt or further processing.
+ *
+ * @param currentHistory - The existing conversation history between the user and the agent.
+ * @param state - The current application state, providing context like model name and input files.
+ * @param promptService - An optional service for formatting prompts. Passed to `callLLM`.
+ * @returns A promise that resolves to a partial `AppState` object. This object includes:
+ *          - `analysisHistory`: The updated conversation history, including the LLM's latest response.
+ *          - `currentAnalysisQuery`: The LLM's response, which will be used as the next query to the user.
+ *          - `userInput`: Cleared, as the input for this turn has been processed.
+ * @throws Re-throws any errors encountered during the `callLLM` invocation, such as API issues or prompt failures.
+ */
 async function callLLMForNextStep(
     currentHistory: HistoryMessage[], 
     state: AppState,

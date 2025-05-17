@@ -62,9 +62,6 @@ export async function callTheLLM(
     const effectiveModel = modelName && modelName.trim() !== '' ? modelName : undefined;
 
     try {
-        // Use dbg for logging the call details
-        // const providerName = process.env[LLM_PROVIDER_ENV_VAR]?.toLowerCase() || OPENAI_PROVIDER;
-        // dbg(`\n--- Calling LLM provider (${providerName}) ---`);
         dbg(`Model requested: ${effectiveModel || 'Provider Default'}`);
         
         // Call the client's chatCompletion method, passing mapped history and the prompt separately

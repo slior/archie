@@ -219,7 +219,6 @@ export async function runGraph(currentInput: Input, config: AppRunnableConfig, p
         // Use the new utility to create the config for the stream
         const streamConfig = createConfigWithPromptService(config, promptService);
         
-        // stream = await agentApp.stream(currentInput, fullConfig); // Old way
         stream = await agentApp.stream(currentInput, streamConfig); // Use new streamConfig
         for await (const chunk of stream) {
             

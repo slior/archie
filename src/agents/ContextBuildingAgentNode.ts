@@ -65,9 +65,3 @@ export async function contextBuildingAgentNode(state: AppState, config: Runnable
         throw new Error(`LLM communication or processing failed during context building for ${state.systemName}. Original error: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-
-// Placeholder for the contextBuildingAgentNode function to be implemented in Step 7
-// export async function contextBuildingAgentNode(state: AppState, config?: RunnableConfig): Promise<Partial<AppState>> {
-//    // Logic will be added in the next step
-//    return {}; 
-// } 
