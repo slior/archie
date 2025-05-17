@@ -17,9 +17,9 @@ graph TD;
     echoAgent([echoAgent]);
     END([End]);
 
-    START -- "analyze:" or "build_context:" --> documentRetrievalNode;
-    START -- "echo" keyword --> echoAgent;
-    START -- other --> END;
+    START -- currentFlow is 'analyze' or 'build_context' --> documentRetrievalNode;
+    START -- currentFlow is NOT 'analyze'/'build_context' AND userInput starts with 'echo' --> echoAgent;
+    START -- currentFlow is NOT 'analyze'/'build_context' AND NOT 'echo' --> END;
 
     documentRetrievalNode -- currentFlow is 'analyze' --> analysisPrepare;
     documentRetrievalNode -- currentFlow is 'build_context' --> contextBuildingAgent;
@@ -66,10 +66,12 @@ The graph consists of the following nodes:
 
 The execution flow follows these connections:
 
-1.  **`START` -> Conditional Routing**: The graph evaluates the initial `userInput`:
-    *   If `userInput` starts with "analyze:" or "build_context:" -> `documentRetrievalNode`.
-    *   If `userInput` starts with "echo" -> `echoAgent`.
-    *   Otherwise -> `END`.
+1.  **`START` -> Conditional Routing**: The graph's execution begins by evaluating the `AppState.currentFlow` property. This property is typically set by the calling command handler based on the initial user command (e.g., an "analyze:..." command would set `currentFlow` to `'analyze'` before invoking the graph).
+    *   If `AppState.currentFlow` is `'analyze'` -> `documentRetrievalNode`.
+    *   If `AppState.currentFlow` is `'build_context'` -> `documentRetrievalNode`.
+    *   Else (if `currentFlow` is not `'analyze'` or `'build_context'`):
+        *   If `AppState.userInput` (lowercase) starts with "echo" -> `echoAgent`.
+        *   Otherwise -> `END`.
 2.  **`documentRetrievalNode` -> Conditional Routing**: After `documentRetrievalNode` retrieves input files (populating `AppState.inputs`), it transitions based on `AppState.currentFlow`:
     *   If `currentFlow` is `'analyze'` -> `analysisPrepare`.
     *   If `currentFlow` is `'build_context'` -> `contextBuildingAgent`.
