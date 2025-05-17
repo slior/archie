@@ -2,7 +2,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { AppState } from "./graph"; 
 import { dbg } from '../utils';
-
+import { RunnableConfig } from "@langchain/core/runnables";
 /**
  * Node to retrieve document contents from a specified directory.
  * Reads .txt and .md files, stores their basenames and content in AppState.inputs.
@@ -11,7 +11,7 @@ import { dbg } from '../utils';
  * @param state The current application state, expecting `inputDirectoryPath` to be set.
  * @returns A Promise resolving to a partial AppState containing the `inputs` record.
  */
-export async function documentRetrievalNode(state: AppState): Promise<Partial<AppState>> {
+export async function documentRetrievalNode(state: AppState, config: RunnableConfig): Promise<Partial<AppState>> {
     const { inputDirectoryPath } = state;
     const inputs: Record<string, string> = {};
 

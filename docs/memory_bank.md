@@ -332,3 +332,79 @@ Yes, the approach should result in the `@memory_bank.md` file being populated wi
         7.  Prepared and appended a summary of this interaction to `docs/memory_bank.md`.
 *   **Did your approach fix the problem?**
     *   Yes, the `docs/agent_graph.md` file was updated to correctly reflect the agent graph's routing logic as implemented in the source code.
+
+## Title: Resolved LangGraph Node Type Mismatch - 17-05-2025
+
+### What did you discover about the project that you didn't know before?
+- The project uses a custom `AppRunnableConfig` which extends LangChain's `RunnableConfig` but makes a `configurable` property (with `thread_id` and `promptService`) mandatory.
+- Agent nodes in the LangGraph setup were initially typed to directly expect `AppRunnableConfig`.
+
+### What was the problem you faced in this chat interaction?
+- A TypeScript type error occurred when adding nodes to the `StateGraph`. The `addNode` method expected a `RunnableLike` function whose `config` parameter is compatible with LangChain's `RunnableConfig` (or `LangGraphRunnableConfig`), but the provided nodes (e.g., `echoAgentNode` via `StateGraphNode` type alias) were defined to strictly require the custom `AppRunnableConfig` for their `config` parameter. This created a mismatch because `AppRunnableConfig` is more specific (requires `configurable`) than the generic `RunnableConfig` that `addNode` is prepared to pass.
+
+### How did you approach the problem?
+1.  **Identified the Core Mismatch**: Recognized that `AppRunnableConfig` (requiring `configurable`) is not assignable to the more generic `config` type expected by `StateGraph.addNode` (which might be a plain `RunnableConfig` or even `Record<string, any>` in some contexts of the error message, not guaranteeing `configurable`).
+2.  **Adjusted Type Alias**: Modified the `StateGraphNode` type alias in `src/agents/graph.ts` to use `RunnableConfig` for its `config` parameter: `type StateGraphNode = (state: AppState, config: RunnableConfig) => Promise<Partial<AppState>>;`.
+3.  **Updated Node Signatures**: Changed the signature of the specific node function (`echoAgentNode` in `src/agents/EchoAgentNode.ts`) to accept `config: RunnableConfig`.
+4.  **Internal Casting**: Inside the node function, the received `RunnableConfig` is cast to `AppRunnableConfig` (e.g., `const appConfig = config as AppRunnableConfig;`) to allow access to the custom `configurable` property. This cast relies on the assumption that the graph will be invoked with an `AppRunnableConfig` and that the checkpointer will manage these fields.
+5.  **Updated Casts in Graph Definition**: Ensured that all nodes added via `.addNode()` in `src/agents/graph.ts` are cast using the updated `StateGraphNode` type alias (e.g., `echoAgentNode as StateGraphNode`).
+
+### Did your approach fix the problem?
+- Yes, this approach resolved the type error for the `echoAgentNode` in `src/agents/graph.ts`. The same pattern needs to be applied to other agent nodes (`analysisPrepareNode`, `analysisInterruptNode`, `documentRetrievalNode`, `contextBuildingAgentNode`) by changing their signatures to accept `RunnableConfig` and then casting it internally to `AppRunnableConfig` to fix remaining similar type errors.
+
+## Implement Initial Graph Unit Tests (Echo Flow) - 17-05-2024 15:10
+**What did you discover about the project that you didn't know before?**
+*   Confirmed that the node name constants (e.g., `ECHO_AGENT`) in `src/agents/graph.ts` were not initially exported, which is necessary for their use in external test files.
+*   Encountered significant TypeScript complexity with LangGraph's generic types for `StateGraph` and `CompiledStateGraph`, particularly concerning the union of node names for transitions. For pragmatic progress on testing, using `any` as a temporary type was necessary.
+*   The `createInitialAppState` helper is useful for ensuring all `AppState` fields are consistently initialized in tests.
+
+**What was the problem you faced in this chat interaction?**
+*   Implementing the first set of unit tests for the graph routing logic in `src/agents/graph.ts`, specifically for the "Echo" flow.
+*   Resolving TypeScript linter errors related to non-exported constants and complex LangGraph types for the compiled graph instance.
+
+**How did you approach the problem?**
+1.  Followed the `EXECUTE` mode of the RIPER-5 protocol.
+2.  Attempted to add imports and the "Echo Flow" test suite to `tests/GraphFlows.test.ts` as per the agreed plan.
+3.  Diagnosed linter errors:
+    *   Identified that node name constants were not exported from `src/agents/graph.ts`.
+    *   Attempted to fix complex type errors for the compiled LangGraph app instance by specifying `CompiledStateGraph` and then `Runnable` types.
+4.  Modified `src/agents/graph.ts` to export the necessary node name constants.
+5.  After multiple attempts to satisfy the TypeScript compiler for the LangGraph types, resorted to using `any` for `app` and `workflowInstance` in `tests/GraphFlows.test.ts` to overcome the type errors and allow focus on test logic, as per the "3 strikes" rule for linter errors.
+6.  Implemented the "Echo Flow" tests, including a case for correct echo routing and a case for default routing to `END` for unknown commands.
+7.  Prepared to continue with other test suites as per the plan.
+
+**Did your approach fix the problem?**
+*   Yes, the node constants were exported, resolving import errors.
+*   Yes, using `any` for the problematic types allowed the test structure for the Echo flow to be put in place without TypeScript compilation blocking progress. The actual test logic can now be validated.
+*   The initial Echo Flow tests are now in `tests/GraphFlows.test.ts`.
+
+## Comprehensive Graph Flow Unit Test Implementation and Review - 17-05-2024
+**What did you discover about the project that you didn't know before?**
+*   The iterative process of fixing TypeScript and Sinon assertion issues is crucial for successful test development.
+*   Using `SinonSpyCall.calledBefore(SinonSpyCall)` is the correct way to assert the order of specific calls between spies.
+*   The `createWorkflow` factory pattern in `src/agents/graph.ts` greatly facilitated unit testing by allowing mock node injection.
+*   A pre-defined plan for testing can be effectively executed, and a review step helps ensure all requirements are met.
+
+**What was the problem you faced in this chat interaction?**
+*   To implement a comprehensive suite of unit tests for all major routing scenarios of the agent graph defined in `src/agents/graph.ts`, based on a previously agreed plan.
+*   This involved overcoming further TypeScript type complexities with LangGraph (managed by using `any` type for graph instances) and refining Sinon.js assertion syntax for call order verification.
+*   Ensuring the full plan was executed and subsequently reviewed with the user to confirm completeness.
+
+**How did you approach the problem?**
+1.  Adhered to the RIPER-5 protocol, operating in `RESEARCH`, `PLAN`, `EXECUTE`, and `REVIEW` modes as appropriate.
+2.  **Research & Plan:** Confirmed understanding of the task and existing project context by reading `memory_bank.md`, then formulated a detailed plan for unit test implementation in `tests/GraphFlows.test.ts`.
+3.  **Execute:**
+    *   Modified `src/agents/graph.ts` to export necessary node constants.
+    *   Sequentially implemented test suites in `tests/GraphFlows.test.ts` for:
+        *   Echo Flow (including default routing for unknown commands).
+        *   Analyze Flow (basic routing).
+        *   Build Context Flow (basic routing).
+        *   Analysis Interrupt Logic (verifying the cycle: DR -> AP1 -> AI -> AP2 -> END).
+    *   Iteratively addressed and resolved TypeScript linter errors related to LangGraph types (settling on `any` for graph instances) and Sinon assertion syntax (correcting usage of `calledBefore` for `SinonSpyCall` objects).
+4.  **Review:** Upon user query, conducted a review of the implemented tests against the original plan, confirming that all aspects, including the "Analysis Interrupt Node flow," were covered.
+5.  Updated `docs/memory_bank.md` at intermediate and final stages of the process.
+
+**Did your approach fix the problem?**
+*   Yes, all planned unit tests for the specified graph routing scenarios were successfully implemented in `tests/GraphFlows.test.ts`.
+*   Yes, issues related to module exports, TypeScript typings for LangGraph, and Sinon.js assertion syntax were resolved during the execution phase.
+*   Yes, the entire plan for unit testing the graph flows was completed, and this was confirmed during the review phase.

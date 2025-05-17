@@ -1,17 +1,18 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
+import { RunnableConfig } from "@langchain/core/runnables";
 import { echoAgentNode } from "./EchoAgentNode";
 import { analysisPrepareNode } from "./AnalysisPrepareNode";
 import { analysisInterruptNode } from "./AnalysisInterruptNode";
 import { documentRetrievalNode } from "./DocumentRetrievalNode";
 import { contextBuildingAgentNode } from './ContextBuildingAgentNode';
-import { dbg } from "../utils";
+import { AppRunnableConfig, dbg } from "../utils";
 
 // Define node names as constants
-const ECHO_AGENT = "echoAgent";
-const ANALYSIS_PREPARE = "analysisPrepare";
-const ANALYSIS_INTERRUPT = "analysisInterrupt";
-const DOCUMENT_RETRIEVAL = "documentRetrievalNode";
-const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
+export const ECHO_AGENT = "echoAgent";
+export const ANALYSIS_PREPARE = "analysisPrepare";
+export const ANALYSIS_INTERRUPT = "analysisInterrupt";
+export const DOCUMENT_RETRIEVAL = "documentRetrievalNode";
+export const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
 
 /**
  * Represents the role of a participant in a conversation.
@@ -92,80 +93,174 @@ const channels = {
     contextBuilderOutputFileName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
 };
 
-// Instantiate the graph with the defined state and channels.
-const workflow = new StateGraph<AppState>({ channels })
-    .addNode(ECHO_AGENT, echoAgentNode)
-    .addNode(ANALYSIS_PREPARE, analysisPrepareNode)
-    .addNode(ANALYSIS_INTERRUPT, analysisInterruptNode)
-    .addNode(DOCUMENT_RETRIEVAL, documentRetrievalNode)
-    .addNode(CONTEXT_BUILDING_AGENT, contextBuildingAgentNode)
+type StateGraphNode = (state: AppState, config: RunnableConfig) => Promise<Partial<AppState>>;
+
+export function safeAppConfig(config: RunnableConfig): AppRunnableConfig {
+    if (!config.configurable) {
+        throw new Error("configurable property is required");
+    }
+    return config as AppRunnableConfig;
+}
+
+export function createWorkflow(nodes: Record<string, StateGraphNode>)
+{
+       return new StateGraph<AppState>({ channels })
+        .addNode(ECHO_AGENT, nodes[ECHO_AGENT])
+        .addNode(ANALYSIS_PREPARE, nodes[ANALYSIS_PREPARE])
+        .addNode(ANALYSIS_INTERRUPT, nodes[ANALYSIS_INTERRUPT])
+        .addNode(DOCUMENT_RETRIEVAL, nodes[DOCUMENT_RETRIEVAL])
+        .addNode(CONTEXT_BUILDING_AGENT, nodes[CONTEXT_BUILDING_AGENT])
+        
+        // Make the conditional edge originate from START
+        .addConditionalEdges(START, 
+            (state: AppState) => { // Keep synchronous
+                
+                const userInput = state.userInput.toLowerCase();
+                let nextNodeDecision: string;
+
+                if (shouldTriggerAnalysis(state)) {
+                    nextNodeDecision = DOCUMENT_RETRIEVAL;
+                }
+                else if (shouldTriggerContextBuilding(state)) {
+                    nextNodeDecision = DOCUMENT_RETRIEVAL;
+                } else if (userInput.startsWith(CMD_ECHO)) {
+                    nextNodeDecision = ECHO_AGENT;
+                } else {
+                    nextNodeDecision = END;
+                }
+                
+                dbg(`Initial Routing from START: Routing to ${nextNodeDecision}`);
+                return nextNodeDecision;
+            },
+            {
+                // Mapping destinations
+                [ECHO_AGENT]: ECHO_AGENT,
+                [DOCUMENT_RETRIEVAL]: DOCUMENT_RETRIEVAL,
+                [END]: END,
+            }
+        )
+        .addConditionalEdges(DOCUMENT_RETRIEVAL, 
+            (state: AppState) => {
+                switch (state.currentFlow) {
+                    case ANALYZE_FLOW:
+                        dbg('Routing after Document Retrieval to Analysis Prepare');
+                        return ANALYSIS_PREPARE;
+                    case BUILD_CONTEXT_FLOW:
+                        dbg('Routing after Document Retrieval to Context Building Agent');
+                        return CONTEXT_BUILDING_AGENT;
+                    default:
+                        console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
+                        dbg('Routing after Document Retrieval to END due to unknown flow.');
+                        return END; // Default to END if flow is not set or unknown
+                }
+            },
+            {
+                [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
+                [CONTEXT_BUILDING_AGENT]: CONTEXT_BUILDING_AGENT,
+                [END]: END
+            }
+        )
+        .addEdge(CONTEXT_BUILDING_AGENT, END)
+        .addEdge(ECHO_AGENT, END)
+        .addConditionalEdges(ANALYSIS_PREPARE,
+            (state: AppState) => { // Keep synchronous 
+                if (state.analysisOutput) {
+                    return END;
+                } else {
+                    return ANALYSIS_INTERRUPT;
+                }
+            },
+            {
+                [END]: END,
+                [ANALYSIS_INTERRUPT]: ANALYSIS_INTERRUPT
+            }
+        )
+        .addEdge(ANALYSIS_INTERRUPT, ANALYSIS_PREPARE) // After interrupt node, go back to the PREPARE node to process the resumed input
+    ;
     
-    // Make the conditional edge originate from START
-    .addConditionalEdges(START, 
-        (state: AppState) => { // Keep synchronous
+}
+// Instantiate the graph with the defined state and channels.
+// const workflow = new StateGraph<AppState>({ channels })
+//     .addNode(ECHO_AGENT, echoAgentNode as StateGraphNode)
+//     .addNode(ANALYSIS_PREPARE, analysisPrepareNode as StateGraphNode)
+//     .addNode(ANALYSIS_INTERRUPT, analysisInterruptNode as StateGraphNode)
+//     .addNode(DOCUMENT_RETRIEVAL, documentRetrievalNode as StateGraphNode)
+//     .addNode(CONTEXT_BUILDING_AGENT, contextBuildingAgentNode as StateGraphNode)
+    
+//     // Make the conditional edge originate from START
+//     .addConditionalEdges(START, 
+//         (state: AppState) => { // Keep synchronous
             
-            const userInput = state.userInput.toLowerCase();
-            let nextNodeDecision: string;
+//             const userInput = state.userInput.toLowerCase();
+//             let nextNodeDecision: string;
 
-            if (shouldTriggerAnalysis(state)) {
-                nextNodeDecision = DOCUMENT_RETRIEVAL;
-            }
-            else if (shouldTriggerContextBuilding(state)) {
-                nextNodeDecision = DOCUMENT_RETRIEVAL;
-            } else if (userInput.startsWith(CMD_ECHO)) {
-                nextNodeDecision = ECHO_AGENT;
-            } else {
-                nextNodeDecision = END;
-            }
+//             if (shouldTriggerAnalysis(state)) {
+//                 nextNodeDecision = DOCUMENT_RETRIEVAL;
+//             }
+//             else if (shouldTriggerContextBuilding(state)) {
+//                 nextNodeDecision = DOCUMENT_RETRIEVAL;
+//             } else if (userInput.startsWith(CMD_ECHO)) {
+//                 nextNodeDecision = ECHO_AGENT;
+//             } else {
+//                 nextNodeDecision = END;
+//             }
             
-            dbg(`Initial Routing from START: Routing to ${nextNodeDecision}`);
-            return nextNodeDecision;
-        },
-        {
-            // Mapping destinations
-            [ECHO_AGENT]: ECHO_AGENT,
-            [DOCUMENT_RETRIEVAL]: DOCUMENT_RETRIEVAL,
-            [END]: END,
-        }
-    )
-    .addConditionalEdges(DOCUMENT_RETRIEVAL, 
-        (state: AppState) => {
-            switch (state.currentFlow) {
-                case ANALYZE_FLOW:
-                    dbg('Routing after Document Retrieval to Analysis Prepare');
-                    return ANALYSIS_PREPARE;
-                case BUILD_CONTEXT_FLOW:
-                    dbg('Routing after Document Retrieval to Context Building Agent');
-                    return CONTEXT_BUILDING_AGENT;
-                default:
-                    console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
-                    dbg('Routing after Document Retrieval to END due to unknown flow.');
-                    return END; // Default to END if flow is not set or unknown
-            }
-        },
-        {
-            [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
-            [CONTEXT_BUILDING_AGENT]: CONTEXT_BUILDING_AGENT,
-            [END]: END
-        }
-    )
-    .addEdge(CONTEXT_BUILDING_AGENT, END)
-    .addEdge(ECHO_AGENT, END)
-    .addConditionalEdges(ANALYSIS_PREPARE,
-        (state: AppState) => { // Keep synchronous 
-            if (state.analysisOutput) {
-                return END;
-            } else {
-                return ANALYSIS_INTERRUPT;
-            }
-        },
-        {
-            [END]: END,
-            [ANALYSIS_INTERRUPT]: ANALYSIS_INTERRUPT
-        }
-    )
-    .addEdge(ANALYSIS_INTERRUPT, ANALYSIS_PREPARE) // After interrupt node, go back to the PREPARE node to process the resumed input
-;
+//             dbg(`Initial Routing from START: Routing to ${nextNodeDecision}`);
+//             return nextNodeDecision;
+//         },
+//         {
+//             // Mapping destinations
+//             [ECHO_AGENT]: ECHO_AGENT,
+//             [DOCUMENT_RETRIEVAL]: DOCUMENT_RETRIEVAL,
+//             [END]: END,
+//         }
+//     )
+//     .addConditionalEdges(DOCUMENT_RETRIEVAL, 
+//         (state: AppState) => {
+//             switch (state.currentFlow) {
+//                 case ANALYZE_FLOW:
+//                     dbg('Routing after Document Retrieval to Analysis Prepare');
+//                     return ANALYSIS_PREPARE;
+//                 case BUILD_CONTEXT_FLOW:
+//                     dbg('Routing after Document Retrieval to Context Building Agent');
+//                     return CONTEXT_BUILDING_AGENT;
+//                 default:
+//                     console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
+//                     dbg('Routing after Document Retrieval to END due to unknown flow.');
+//                     return END; // Default to END if flow is not set or unknown
+//             }
+//         },
+//         {
+//             [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
+//             [CONTEXT_BUILDING_AGENT]: CONTEXT_BUILDING_AGENT,
+//             [END]: END
+//         }
+//     )
+//     .addEdge(CONTEXT_BUILDING_AGENT, END)
+//     .addEdge(ECHO_AGENT, END)
+//     .addConditionalEdges(ANALYSIS_PREPARE,
+//         (state: AppState) => { // Keep synchronous 
+//             if (state.analysisOutput) {
+//                 return END;
+//             } else {
+//                 return ANALYSIS_INTERRUPT;
+//             }
+//         },
+//         {
+//             [END]: END,
+//             [ANALYSIS_INTERRUPT]: ANALYSIS_INTERRUPT
+//         }
+//     )
+//     .addEdge(ANALYSIS_INTERRUPT, ANALYSIS_PREPARE) // After interrupt node, go back to the PREPARE node to process the resumed input
+// ;
 
+const nodes = {
+    [ECHO_AGENT]: echoAgentNode as StateGraphNode,
+    [ANALYSIS_PREPARE]: analysisPrepareNode as StateGraphNode,
+    [ANALYSIS_INTERRUPT]: analysisInterruptNode as StateGraphNode,
+    [DOCUMENT_RETRIEVAL]: documentRetrievalNode as StateGraphNode,
+    [CONTEXT_BUILDING_AGENT]: contextBuildingAgentNode as StateGraphNode,
+}
+const workflow = createWorkflow(nodes);
 const checkpointer = new MemorySaver();
 export const app = workflow.compile({ checkpointer }); 

@@ -1,4 +1,4 @@
-import { AppState, Role } from "./graph";
+import { AppState, Role, safeAppConfig } from "./graph";
 import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
 import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
 // import path from 'path'; // Import path here - path is no longer used in this file
@@ -220,9 +220,10 @@ async function callLLMForNextStep(
  * @param config - The LangGraph RunnableConfig, which may contain our AppGraphConfigurable settings
  * @returns Promise<Partial<AppState>> - Updated state with new conversation history, analysis output, or next query
  */
-export async function analysisPrepareNode(state: AppState, config?: RunnableConfig): Promise<Partial<AppState>> {
-    const appConfigurable = config?.configurable as AppGraphConfigurable | undefined;
-    const promptService = appConfigurable?.promptService;
+export async function analysisPrepareNode(state: AppState, config: RunnableConfig): Promise<Partial<AppState>> {
+    // const appConfigurable = config?.configurable as AppGraphConfigurable | undefined;
+    const appConfigurable : AppRunnableConfig = safeAppConfig(config);
+    const promptService = appConfigurable?.configurable?.promptService;
     dbg(`analysisPrepareNode received promptService via RunnableConfig: ${!!promptService}`);
 
     dbg("--- Analysis Prepare Node Running ---");

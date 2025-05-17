@@ -1,5 +1,6 @@
 import { AppState } from "./graph";
 import { interrupt } from "@langchain/langgraph";
+import { RunnableConfig } from "@langchain/core/runnables";
 import { dbg } from "../utils"; // Corrected import path for dbg
 
 /**
@@ -21,7 +22,7 @@ import { dbg } from "../utils"; // Corrected import path for dbg
  * // Interrupts, waits for user input "src/main.ts"
  * // Returns { userInput: "src/main.ts" }
  */
-export async function analysisInterruptNode(state: AppState): Promise<Partial<AppState>> { // Change return type
+export async function analysisInterruptNode(state: AppState, config: RunnableConfig): Promise<Partial<AppState>> {
     dbg("--- Analysis Interrupt Node Running ---");
     const queryToAsk = state.currentAnalysisQuery;
     // dbg(`Interrupting with query: ${queryToAsk}`);

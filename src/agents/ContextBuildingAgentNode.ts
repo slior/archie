@@ -1,4 +1,4 @@
-import { AppState, Role } from "./graph";
+import { AppState, Role, safeAppConfig } from "./graph";
 import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
 import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
 import { summarizeFiles } from './agentUtils';
@@ -12,9 +12,9 @@ import { RunnableConfig } from "@langchain/core/runnables";
  * It takes the input files and summarizes them into a single context string.
  * 
  */
-export async function contextBuildingAgentNode(state: AppState, config?: RunnableConfig): Promise<Partial<AppState>> {
-    const appConfigurable = config?.configurable as AppGraphConfigurable | undefined;
-    const promptService = appConfigurable?.promptService;
+export async function contextBuildingAgentNode(state: AppState, config: RunnableConfig): Promise<Partial<AppState>> {
+    const appConfigurable : AppRunnableConfig = safeAppConfig(config);
+    const promptService = appConfigurable?.configurable?.promptService;
 
     dbg("--- Context Building Agent Node Running ---");
 
