@@ -108,6 +108,27 @@ node dist/main.js ask "List all known components"
 
 The response is printed directly to the console.
 
+### `build-context`
+
+Generates a context overview document for a specified system or feature based on input files. It reads files from an input directory, uses an LLM to summarize them, and saves the overview as a markdown file.
+
+**Arguments:**
+*   `--inputs <directory_path>`: Specifies the directory containing input files (`.txt`, `.md`) for context generation.
+*   `--system-name <name>`: The name of the system or feature for which to build the context. This name is used in the output filename.
+
+**Output:**
+The generated context overview is saved as `<system_name>_context.md` in the `--inputs` directory.
+
+**Example Usage:**
+
+```bash
+# Example: Build context for a feature named "AuthService" using documents in ./docs/auth
+node dist/main.js build-context --inputs ./docs/auth --system-name AuthService
+
+# Example using ts-node
+npm run start -- build-context --inputs ./specs/new_module --system-name NewModuleIntegration
+```
+
 ### Global Options
 
 *   `--memory-file <path>`: Specify the path to the JSON file used for persistent memory (defaults to `./memory.json`).
@@ -123,6 +144,7 @@ For a deeper understanding of the internal workings, refer to the following docu
 
 *   [`docs/main_shell_flow.md`](docs/main_shell_flow.md): Describes the overall command-line execution flow, from parsing arguments with `commander` to command dispatch and memory handling.
 *   [`docs/analyze_flow.md`](docs/analyze_flow.md): Details the step-by-step execution of the `analyze` command, including file reading, the conversational loop, LangGraph interrupts (Human-in-the-Loop), state management, and final output generation.
+*   [`docs/build_context_flow.md`](docs/build_context_flow.md): Describes the execution flow of the `build-context` command, detailing how it generates a system context overview.
 *   [`docs/agent_graph.md`](docs/agent_graph.md): Explains the structure, state, nodes, and conditional logic of the LangGraph agent graph used by the commands.
 
 ## Customizing Agent Prompts
@@ -189,4 +211,4 @@ npm run start -- --prompts-config ./my_prompts_config.json ask "..."
 *   **Partial Configuration:** If you provide a configuration file but do not specify an override for every possible agent or prompt key, Archie will:
     *   Use your custom prompt if an entry for a specific `AgentName` and `promptKey` is found in your configuration.
     *   Fall back to the default built-in prompt if the specific `AgentName` or `promptKey` is not found in your configuration.
-*   **Default Prompt Locations:** The default prompts are located within the project structure, typically under `src/agents/prompts/<AgentName>/<promptKey>.txt` (e.g., `src/agents/prompts/AnalysisPrepareNode/initial.txt`).
+*   **Default Prompt Locations:** The default prompts are located within the project structure, typically under `src/agents/prompts/<AgentName>/<promptKey>.txt`

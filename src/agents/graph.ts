@@ -3,6 +3,7 @@ import { echoAgentNode } from "./EchoAgentNode";
 import { analysisPrepareNode } from "./AnalysisPrepareNode";
 import { analysisInterruptNode } from "./AnalysisInterruptNode";
 import { documentRetrievalNode } from "./DocumentRetrievalNode";
+import { contextBuildingAgentNode } from './ContextBuildingAgentNode';
 import { dbg } from "../utils";
 
 // Define node names as constants
@@ -10,6 +11,7 @@ const ECHO_AGENT = "echoAgent";
 const ANALYSIS_PREPARE = "analysisPrepare";
 const ANALYSIS_INTERRUPT = "analysisInterrupt";
 const DOCUMENT_RETRIEVAL = "documentRetrievalNode";
+const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
 
 /**
  * Represents the role of a participant in a conversation.
@@ -52,6 +54,12 @@ export interface AppState {
 
     /** The name/ID of the LLM model to use for agent interactions */
     modelName: string;
+
+    // New fields for Context Building Flow
+    currentFlow?: 'analyze' | 'build_context' | null;
+    systemName?: string;
+    contextBuilderOutputContent?: string;
+    contextBuilderOutputFileName?: string;
 }
 
 function shouldTriggerAnalysis(userInput: string): boolean {
@@ -59,25 +67,32 @@ function shouldTriggerAnalysis(userInput: string): boolean {
     return analysisKeywords.some(keyword => userInput.includes(keyword));
 }
 
-// Instantiate the graph
-const workflow = new StateGraph<AppState>({
-        channels: {
-            //save the new user input
-            userInput: { value: (currentState, update) => update !== undefined && update !== null ? update : currentState, default: () => "" },   
-            response: { value: (x, y) => y, default: () => "" },                                        // Takes new response (used by echo)
-            fileContents: { value: (x, y) => y ?? x, default: () => ({}) },                             // Persist, allow override
-            inputs: { value: (x, y) => y ?? x, default: () => ({}) }, // Persist, allow override
-            analysisHistory: { value: (x, y) => (x || []).concat(y || []), default: () => ([]) },       // Append new messages
-            analysisOutput: { value: (x, y) => y, default: () => "" },                                  // Takes new output
-            currentAnalysisQuery: { value: (x, y) => y, default: () => "" },                            // Takes new query
-            modelName: { value: (x, y) => y ?? x, default: () => "" }, // Item 18: Add channel config
-            inputDirectoryPath: { value: (x, y) => y ?? x, default: () => "" },
-        },
-    })
+// Define the channels for the graph state, specifying how they should be updated.
+const channels = {
+    userInput: { value: (x: string, y: string) => y ?? x, default: () => "" },
+    inputDirectoryPath: { value: (x: string, y: string) => y ?? x, default: () => "" },
+    inputs: { value: (x: Record<string, string>, y: Record<string, string>) => y ?? x, default: () => ({}) },
+    response: { value: (x: string, y: string) => y ?? x, default: () => "" },
+    fileContents: { value: (x: Record<string, string>, y: Record<string, string>) => y ?? x, default: () => ({}) },
+    analysisHistory: { value: (x: Array<{ role: Role; content: string }>, y: Array<{ role: Role; content: string }>) => (x || []).concat(y || []), default: () => [] as Array<{ role: Role; content: string }> },
+    analysisOutput: { value: (x: string, y: string) => y ?? x, default: () => "" },
+    currentAnalysisQuery: { value: (x: string, y: string) => y ?? x, default: () => "" },
+    modelName: { value: (x: string, y: string) => y ?? x, default: () => "" },
+
+    // New channel configurations
+    currentFlow: { value: (x: 'analyze' | 'build_context' | null | undefined, y: 'analyze' | 'build_context' | null | undefined) => y !== undefined ? y : x, default: () => null },
+    systemName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
+    contextBuilderOutputContent: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
+    contextBuilderOutputFileName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
+};
+
+// Instantiate the graph with the defined state and channels.
+const workflow = new StateGraph<AppState>({ channels })
     .addNode(ECHO_AGENT, echoAgentNode)
     .addNode(ANALYSIS_PREPARE, analysisPrepareNode)
     .addNode(ANALYSIS_INTERRUPT, analysisInterruptNode)
     .addNode(DOCUMENT_RETRIEVAL, documentRetrievalNode)
+    .addNode(CONTEXT_BUILDING_AGENT, contextBuildingAgentNode)
     
     // Make the conditional edge originate from START
     .addConditionalEdges(START, 
@@ -87,30 +102,47 @@ const workflow = new StateGraph<AppState>({
             let nextNodeDecision: string;
 
             // Determine initial routing based on input
-            switch (true) {
-                case shouldTriggerAnalysis(userInput):
-                    nextNodeDecision = DOCUMENT_RETRIEVAL;
-                    break;
-                case userInput.startsWith(CMD_ECHO):
-                    nextNodeDecision = ECHO_AGENT;
-                    break;
-                default:
-                    nextNodeDecision = END;
-                    break;
+            if (userInput.startsWith("analyze:")) {
+                nextNodeDecision = DOCUMENT_RETRIEVAL;
+            }
+            else if (userInput.startsWith("build_context:")) {
+                nextNodeDecision = DOCUMENT_RETRIEVAL;
+            } else if (userInput.startsWith(CMD_ECHO)) {
+                nextNodeDecision = ECHO_AGENT;
+            } else {
+                nextNodeDecision = END;
             }
             
-            dbg(`Initial Routing Condition: Routing to ${nextNodeDecision}`); // Updated log message
+            dbg(`Initial Routing from START: Routing to ${nextNodeDecision}`);
             return nextNodeDecision;
         },
         {
             // Mapping destinations
             [ECHO_AGENT]: ECHO_AGENT,
-            [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
             [DOCUMENT_RETRIEVAL]: DOCUMENT_RETRIEVAL,
             [END]: END,
         }
     )
-    .addEdge(DOCUMENT_RETRIEVAL, ANALYSIS_PREPARE)
+    .addConditionalEdges(DOCUMENT_RETRIEVAL, 
+        (state: AppState) => {
+            if (state.currentFlow === 'analyze') {
+                dbg('Routing after Document Retrieval to Analysis Prepare');
+                return ANALYSIS_PREPARE;
+            } else if (state.currentFlow === 'build_context') {
+                dbg('Routing after Document Retrieval to Context Building Agent');
+                return CONTEXT_BUILDING_AGENT;
+            }
+            console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
+            dbg('Routing after Document Retrieval to END due to unknown flow.');
+            return END; // Default to END if flow is not set or unknown
+        },
+        {
+            [ANALYSIS_PREPARE]: ANALYSIS_PREPARE,
+            [CONTEXT_BUILDING_AGENT]: CONTEXT_BUILDING_AGENT,
+            [END]: END
+        }
+    )
+    .addEdge(CONTEXT_BUILDING_AGENT, END)
     .addEdge(ECHO_AGENT, END)
     .addConditionalEdges(ANALYSIS_PREPARE,
         (state: AppState) => { // Keep synchronous 

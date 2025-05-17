@@ -6,13 +6,15 @@ import { DEFAULT_MODEL_NAME } from './agents/llmConstants';
 import { dbg, say } from './utils';
 import { runAnalysis } from './commands/analyze';
 import { runAsk } from './commands/ask';
+import { runBuildContext } from './commands/buildContext';
 import { PromptService } from './services/PromptService';
 
 
-const ANALYSIS_ERROR = 1;
-const ASK_ERROR = 2;
-const COMMAND_PARSING_ERROR = 3;
-const UNHANDLED_ERROR = 4;
+const GENERAL_ERROR = 1;
+const ANALYSIS_ERROR = 2;
+const ASK_ERROR = 3;
+const COMMAND_PARSING_ERROR = 4;
+const UNHANDLED_ERROR = 5;
 // Load environment variables from .env file
 dotenv.config();
 
@@ -28,10 +30,9 @@ async function main() {
     .name('archie')
     .version('1.0.0')
     .description('Archie - AI Architecture Assistant (CLI Mode)')
-    .option('--memory-file <path>', 'Path to the memory JSON file', './memory.json')
-    .option('--model <name>', 'Specify the OpenAI model to use', DEFAULT_MODEL_NAME)
-    .option('--prompts-config <path>', 'Path to the prompts configuration JSON file')
-    .enablePositionalOptions(); // Recommended when using subcommands with global options
+    .option('-m, --model <model_name>', 'Global AI model to use')
+    .option('--memory-file <path>', 'Global path to memory file', 'archie_memory.json')
+    .option('--prompts-config <path>', 'Global path to a JSON file for custom prompt configurations');
 
   // Retrieve global options early (for use in command actions)
   program.parseOptions(process.argv);
@@ -57,19 +58,50 @@ async function main() {
   // 'analyze' command
   program
     .command('analyze')
-    .description('Run analysis on specified files with a query')
+    .description('Run analysis on a given query and input files')
     .requiredOption('-q, --query <query>', 'The analysis query')
     .requiredOption('-i, --inputs <directory>', 'Input directory for analysis context')
-    .action(async (options) => { // receives local options object
+    // Allow local override of global model and prompts config
+    .option('-m, --model <model_name>', 'Specify the AI model to use for this analysis')
+    .option('--prompts-config <path>', 'Path to a JSON file for custom prompt configurations for this analysis')
+    .action(async (options) => {
+      const globalOpts = program.opts();
+      const effectiveModel = options.model || globalOpts.model || DEFAULT_MODEL_NAME;
+      const effectivePromptsConfig = options.promptsConfig || globalOpts.promptsConfig;
+      const localPromptService = effectivePromptsConfig ? new PromptService(effectivePromptsConfig) : promptService;
+
       try {
         dbg(`Running analysis with query: "${options.query}"`);
         dbg(`Input directory: ${options.inputs}`);
-        // Call handler with specific args + global modelName & memoryService
-        await runAnalysis(options.query, options.inputs, modelName, memoryService, promptService);
+        await runAnalysis(options.query, options.inputs, effectiveModel, memoryService, localPromptService);
         dbg("Analysis command finished successfully.");
       } catch (error) {
         dbg(`Analysis command failed: ${error}`);
-        process.exit(ANALYSIS_ERROR); // Exit on command error
+        process.exit(ANALYSIS_ERROR);
+      }
+    });
+
+  // New build-context command
+  program.command('build-context')
+    .description('Build context for a system or feature from input files.')
+    .requiredOption('-i, --inputs <directory>', 'Input directory containing files for context building')
+    .requiredOption('-n, --name <system_name>', 'Name of the system or feature')
+    // Allow local override of global model and prompts config
+    .option('-m, --model <model_name>', 'Specify the AI model to use for this context build')
+    .option('--prompts-config <path>', 'Path to a JSON file for custom prompt configurations for this context build')
+    .action(async (options) => {
+      const globalOpts = program.opts();
+      const effectiveModel = options.model || globalOpts.model || DEFAULT_MODEL_NAME;
+      const effectivePromptsConfig = options.promptsConfig || globalOpts.promptsConfig;
+      const localPromptService = effectivePromptsConfig ? new PromptService(effectivePromptsConfig) : promptService;
+
+      try {
+        dbg(`Running context build for system: "${options.name}" with inputs from "${options.inputs}"`);
+        await runBuildContext(options.name, options.inputs, effectiveModel, memoryService, localPromptService);
+        dbg("Build-context command finished successfully.");
+      } catch (error) {
+        dbg(`Build-context command failed: ${error}`);
+        process.exit(GENERAL_ERROR);
       }
     });
 
@@ -80,14 +112,14 @@ async function main() {
     .argument('<input...>', 'The text input/question for the agent')
     .action(async (inputParts) => { // receives array of positional arguments
       const inputText = inputParts.join(' ');
+      const globalOpts = program.opts();
       try {
         dbg(`Sending to agent: "${inputText}"`);
-        // Call handler with specific args + global modelName & memoryService
-        await runAsk(inputText, modelName, memoryService, promptService);
+        await runAsk(inputText, globalOpts.model || DEFAULT_MODEL_NAME, memoryService, promptService);
         dbg("Ask command finished successfully.");
       } catch (error) {
         dbg(`Ask command failed: ${error}`);
-        process.exit(ASK_ERROR); // Exit on command error
+        process.exit(GENERAL_ERROR);
       }
     });
 

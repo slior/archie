@@ -5,7 +5,7 @@ import inquirer from 'inquirer';
 import { app as agentApp, AppState } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService';
 import { PromptService } from '../services/PromptService';
-import { dbg, say, newGraphConfig, AppRunnableConfig } from '../utils';
+import { dbg, say, newGraphConfig, AppRunnableConfig, persistOutput, createConfigWithPromptService } from '../utils';
 // Define types needed within this command module
 export type Input = Partial<AppState> | Command;
 type ResolveFn = (...paths: string[]) => string;
@@ -70,6 +70,7 @@ export async function runAnalysis(
         response: "",
         modelName: modelName,
         inputDirectoryPath: inputsDir,
+        currentFlow: 'analyze',
     };
     const config = newGraphConfigFn();
 
@@ -141,13 +142,8 @@ export async function persistFinalOutput(
     resolveFn: ResolveFn = path.resolve,
     writeFileFn = fsPromises.writeFile
 ) {
-    const outputPath = resolveFn(targetDir, 'analysis_result.md');
-    try {
-        await writeFileFn(outputPath, output || "", 'utf-8'); // Write empty string if output is null/undefined
-        say(`Analysis results saved to: ${outputPath}`);
-    } catch (error) {
-        console.error(`Error saving analysis results to ${outputPath}:`, error);
-    }
+    // Call the shared persistOutput utility
+    await persistOutput(output, targetDir, 'analysis_result.md', resolveFn, writeFileFn);
 }
 
 
@@ -220,17 +216,11 @@ export async function runGraph(currentInput: Input, config: AppRunnableConfig, p
 
     try {
         dbg("Invoking agent graph...");
-        const fullConfig = {
-            ...config,
-            configurable: {
-                ...config.configurable,
-                promptService: promptService,
-            },
-        };
-
-        config.configurable.promptService = promptService;
-        // stream = await agentApp.stream(currentInput, fullConfig);
-        stream = await agentApp.stream(currentInput, config);
+        // Use the new utility to create the config for the stream
+        const streamConfig = createConfigWithPromptService(config, promptService);
+        
+        // stream = await agentApp.stream(currentInput, fullConfig); // Old way
+        stream = await agentApp.stream(currentInput, streamConfig); // Use new streamConfig
         for await (const chunk of stream) {
             
             if (chunk.__interrupt__) {

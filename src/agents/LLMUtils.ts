@@ -7,6 +7,9 @@ import { Role } from './graph';
 // Load environment variables
 dotenv.config();
 
+// Define and export HistoryMessage type
+export type HistoryMessage = { role: Role; content: string };
+
 // Singleton instance for the LLM client
 let clientInstance: ILLMClient | null = null;
 
@@ -42,7 +45,7 @@ export function getLLMClient(): ILLMClient {
  */
 export async function callTheLLM(
     // Use internal Role type for input history
-    history: Array<{ role: Role; content: string }>, 
+    history: HistoryMessage[], // Updated to use the exported HistoryMessage type
     prompt: string,
     modelName?: string
 ): Promise<string> {

@@ -1,0 +1,10 @@
+You are an expert software architect. Based on the following summarized file contents for the system or feature named "{{systemName}}", please generate a concise and informative context overview.
+
+This overview should explain the main purpose, key components, and primary interactions or data flows described in the provided files. Aim for a summary that would quickly onboard someone to the high-level understanding of "{{systemName}}".
+
+Format the output as a markdown document.
+
+File Summaries:
+{{fileSummaries}}
+
+Generate the context overview: 

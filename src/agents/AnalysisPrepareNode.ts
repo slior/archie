@@ -1,12 +1,13 @@
 import { AppState, Role } from "./graph";
 import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
-import { callTheLLM } from './LLMUtils'; // Import the OpenAI utility
-import path from 'path'; // Import path here
+import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
+// import path from 'path'; // Import path here - path is no longer used in this file
 import { PromptService } from "../services/PromptService"; // Added PromptService import
 import { RunnableConfig } from "@langchain/core/runnables"; // Import RunnableConfig
+import { summarizeFiles } from './agentUtils'; // Import summarizeFiles from agentUtils
 
 // Define the type for history based on AppState Role
-type HistoryMessage = { role: Role; content: string };
+// type HistoryMessage = { role: Role; content: string }; // Removed local definition
 
 const PROMPT_TYPE_INITIAL = 'initial';
 const PROMPT_TYPE_FOLLOWUP = 'followup';
@@ -33,18 +34,18 @@ type PromptType = typeof PROMPT_TYPE_INITIAL | typeof PROMPT_TYPE_FOLLOWUP | typ
  * 
  * Files are separated by double newlines in the output.
  */
-export function summarizeFiles(files: Record<string, string>): string {
-    if (Object.keys(files).length === 0) return "No files provided.";
-
-    const summaries = Object.entries(files).map(([filePath, content]) => {
-        const fileName = path.basename(filePath); // Extract filename
-        const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + "..." : content;
-        return `--- File: ${fileName} ---
-${truncatedContent}`;
-    });
-
-    return summaries.join("\n\n");
-}
+// export function summarizeFiles(files: Record<string, string>): string { // Moved to agentUtils.ts
+//     if (Object.keys(files).length === 0) return "No files provided.";
+// 
+//     const summaries = Object.entries(files).map(([filePath, content]) => {
+//         const fileName = path.basename(filePath); // Extract filename
+//         const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + "..." : content;
+//         return `--- File: ${fileName} ---
+// ${truncatedContent}`;
+//     });
+// 
+//     return summaries.join("\n\n");
+// }
 
 
 /**

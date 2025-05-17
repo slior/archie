@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
-import { summarizeFiles } from '../src/agents/AnalysisPrepareNode';
+// import { summarizeFiles } from '../src/agents/AnalysisPrepareNode';
+import { summarizeFiles } from '../src/agents/agentUtils';
 // path.basename is used by summarizeFiles, so its behavior is implicitly tested.
 
 
