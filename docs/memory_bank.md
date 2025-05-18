@@ -408,3 +408,25 @@ Yes, the approach should result in the `@memory_bank.md` file being populated wi
 *   Yes, all planned unit tests for the specified graph routing scenarios were successfully implemented in `tests/GraphFlows.test.ts`.
 *   Yes, issues related to module exports, TypeScript typings for LangGraph, and Sinon.js assertion syntax were resolved during the execution phase.
 *   Yes, the entire plan for unit testing the graph flows was completed, and this was confirmed during the review phase.
+
+## Title: Document LLM Prompts in agent_graph.md - 18-05-2025
+
+- **What did you discover about the project that you didn't know before?**
+    - I confirmed the specific default prompts available: `AnalysisPrepareNode/initial.txt`, `AnalysisPrepareNode/final.txt`, `AnalysisPrepareNode/followup.txt`, and `ContextBuildingAgentNode/context_build.txt`.
+    - I identified the specific parameters used within each of these default prompt files.
+- **What was the problem you faced in this chat interaction?**
+    - The user wanted to document the existing LLM prompts, their configuration keys, purposes, and parameters in the `agent_graph.md` file.
+    - The user wanted to update `llms.txt` to reflect that `agent_graph.md` now contains information about default LLM prompt configurations.
+- **How did you approach the problem?**
+    1. Used `list_dir` to confirm the prompt files in `src/agents/prompts/AnalysisPrepareNode/` and `src/agents/prompts/ContextBuildingAgentNode/`.
+    2. Used `read_file` to read the content of each identified prompt file.
+    3. Extracted the prompt key (agentName/fileNameWithoutExtension), inferred its purpose from the content, and listed all `{{parameter}}` placeholders.
+    4. Formatted this information into a new markdown section.
+    5. Used `edit_file` to add this new section to the end of `docs/agent_graph.md`.
+    6. Identified the existing link to `agent_graph.md` in `llms.txt`.
+    7. Modified the description of this link to include that it now also details default LLM prompt configurations.
+    8. Used `edit_file` to apply the change to `llms.txt`.
+- **Did your approach fix the problem?**
+    - Yes, the new section was successfully added to the specified file.
+    - Yes, the `llms.txt` file was updated as requested.
+    

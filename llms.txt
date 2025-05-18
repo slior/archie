@@ -15,4 +15,4 @@ Archie is designed to streamline software architecture workflows by providing in
 
 - [Analysis Flow (analyze_flow.md)](./docs/analyze_flow.md): Describes the detailed workflow for the `analyze` command, involving multi-turn dialogue and solution approval.
 - [Main Interaction Flow (main_shell_flow.md)](./docs/main_shell_flow.md): Outlines the primary interaction patterns and command handling.
-- [Agent Graph (agent_graph.md)](./docs/agent_graph.md): Details the structure and states of the LangGraphJS agent graph used for managing conversations. 
+- [Agent Graph (agent_graph.md)](./docs/agent_graph.md): Details the structure, states, and default LLM prompt configurations of the LangGraphJS agent graph used for managing conversations. 

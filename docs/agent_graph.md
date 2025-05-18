@@ -81,3 +81,38 @@ The execution flow follows these connections:
 5.  **`analysisInterrupt` -> `analysisPrepare`**: After resuming from an interrupt, execution always returns to `analysisPrepare` to process the user's input.
 6.  **`contextBuildingAgent` -> `END`**: After `contextBuildingAgent` generates the context overview content and filename, the graph terminates. (The actual file persistence happens in the `build-context` command handler after the graph concludes).
 7.  **`echoAgent` -> `END`**: After the `echoAgent` completes, the graph always terminates. 
+
+## LLM Prompts Configuration
+
+This section details the default LLM prompts used by various agents within the system. These prompts can be overridden using the prompt configuration feature (see `docs/features/config_prompts.md`).
+
+### `AnalysisPrepareNode/initial.txt`
+
+*   **Key:** `AnalysisPrepareNode/initial`
+*   **Description:** This prompt is used to start an analysis based on initial user input and summaries of relevant files. It asks the LLM to identify the primary goal and ask clarifying questions if needed.
+*   **Parameters:**
+    *   `{{fileSummaries}}`: Summaries of the content of input files.
+    *   `{{firstUserMessage}}`: The initial query or message from the user.
+
+### `AnalysisPrepareNode/final.txt`
+
+*   **Key:** `AnalysisPrepareNode/final`
+*   **Description:** This prompt is used to generate a final analysis summary based on the conversation history and a list of files. The summary should include identified assumptions, main components, discussed alternatives with tradeoffs, a summary of design decisions, and any open questions.
+*   **Parameters:**
+    *   `{{history}}`: The conversation history between the user and the analysis agent.
+    *   `{{fileList}}`: A list of filenames relevant to the analysis.
+
+### `AnalysisPrepareNode/followup.txt`
+
+*   **Key:** `AnalysisPrepareNode/followup`
+*   **Description:** This prompt is used to continue an ongoing analysis based on the latest user message in the conversation history and a list of relevant files. It instructs the LLM to ask further clarifying questions or provide analysis as appropriate.
+*   **Parameters:**
+    *   `{{fileList}}`: A list of filenames relevant to the analysis.
+
+### `ContextBuildingAgentNode/context_build.txt`
+
+*   **Key:** `ContextBuildingAgentNode/context_build`
+*   **Description:** This prompt is used to generate a concise markdown context overview for a given system or feature name, based on summarized file contents. The overview should explain the main purpose, key components, and primary interactions or data flows described in the provided files.
+*   **Parameters:**
+    *   `{{systemName}}`: The name of the system or feature for which the context is being built.
+    *   `{{fileSummaries}}`: Summaries of the content of input files related to the system/feature. 
