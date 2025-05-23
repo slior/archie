@@ -1,1 +1,8 @@
-Continue the analysis based on the latest user message in the history. Files provided: [{{fileList}}]. Ask further clarifying questions or provide analysis as appropriate. 
+Continue the analysis based on the latest user message in the history. 
+------------------
+Files provided: [{{fileList}}].
+------------------
+Available system context:
+{{systemContext}}
+------------------
+Ask further clarifying questions or provide analysis as appropriate. 

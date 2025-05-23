@@ -7,8 +7,8 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "mocha --require ts-node/register tests/**/*.test.ts",
-    "test:watch": "mocha --require ts-node/register tests/**/*.test.ts --watch src/**/*.ts",
+    "test": "mocha -r ts-node/register 'tests/**/*.test.ts'",
+    "test:watch": "mocha -r ts-node/register 'tests/**/*.test.ts' --watch src/**/*.ts",
     "build": "tsc",
     "start": "ts-node src/main.ts",
     "docs:graph": "ts-node ./scripts/update-graph-docs.ts"
@@ -24,12 +24,13 @@
     "@types/sinon": "^17.0.4",
     "@types/uuid": "^10.0.0",
     "chai": "^4.5.0",
-    "mocha": "^11.2.2",
+    "mocha": "^11.4.0",
     "sinon": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.56",
     "@langchain/langgraph": "^0.2.67",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",

@@ -18,7 +18,7 @@ let mockMemoryServiceInstance: MemoryService;
 describe('Analyze Command (src/commands/analyze.ts)', () => {
 
   beforeEach(() => {
-    mockMemoryServiceInstance = new MemoryService(); // Create fresh instance for each test
+    mockMemoryServiceInstance = MemoryService.fromState(undefined); // Create fresh instance for each test
 
     // Stub utils used by the command
     sinon.stub(utils, 'dbg');

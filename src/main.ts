@@ -8,19 +8,50 @@ import { runAnalysis } from './commands/analyze';
 import { runAsk } from './commands/ask';
 import { runBuildContext } from './commands/buildContext';
 import { PromptService } from './services/PromptService';
+import { DEFAULT_CONTEXT_FILE_PATH } from './config';
 
-
+// Error codes
 const GENERAL_ERROR = 1;
 const ANALYSIS_ERROR = 2;
 const ASK_ERROR = 3;
 const COMMAND_PARSING_ERROR = 4;
 const UNHANDLED_ERROR = 5;
+
 // Load environment variables from .env file
 dotenv.config();
 
 say("Archie Architecture Assistant Starting...");
 
-const memoryService = new MemoryService(); // Instantiate MemoryService
+const memoryService = MemoryService.fromState(undefined); // Instantiate MemoryService with default state
+
+/**
+ * Template method for executing commands with automatic memory management.
+ * Handles loading memory before command execution and saving updated memory after.
+ */
+async function withMemoryManagement(
+    memoryService: MemoryService,
+    memoryFilePath: string,
+    commandHandler: () => Promise<any>
+): Promise<void> {
+    // Load memory before command execution
+    await memoryService.loadMemory(memoryFilePath);
+    dbg("Memory loaded for command execution.");
+    
+    try {
+        // Execute the command and get final state
+        const finalState = await commandHandler();
+        
+        // Update global memory with final state if available
+        if (finalState?.system_context) {
+            memoryService.updateFromState(finalState.system_context);
+            dbg("Updated global memory service with final command state.");
+        }
+    } finally {
+        // Always save memory, even if command failed
+        await memoryService.saveMemory();
+        dbg("Memory saved after command execution.");
+    }
+}
 
 async function main() {
   const program = new Command();
@@ -31,7 +62,7 @@ async function main() {
     .version('1.0.0')
     .description('Archie - AI Architecture Assistant (CLI Mode)')
     .option('-m, --model <model_name>', 'Global AI model to use')
-    .option('--memory-file <path>', 'Global path to memory file', 'archie_memory.json')
+    .option('--memory-file <path>', 'Global path to memory file', DEFAULT_CONTEXT_FILE_PATH)
     .option('--prompts-config <path>', 'Global path to a JSON file for custom prompt configurations');
 
   // Retrieve global options early (for use in command actions)
@@ -49,9 +80,6 @@ async function main() {
 
   // Instantiate PromptService
   const promptService = new PromptService(promptsConfigPath);
-
-  // Load memory before parsing/executing commands
-  await memoryService.loadMemory(memoryFilePath);
 
   // --- Define Commands ---
 
@@ -73,7 +101,9 @@ async function main() {
       try {
         dbg(`Running analysis with query: "${options.query}"`);
         dbg(`Input directory: ${options.inputs}`);
-        await runAnalysis(options.query, options.inputs, effectiveModel, memoryService, localPromptService);
+        await withMemoryManagement(memoryService, memoryFilePath, async () => {
+          return await runAnalysis(options.query, options.inputs, effectiveModel, memoryService, localPromptService);
+        });
         dbg("Analysis command finished successfully.");
       } catch (error) {
         dbg(`Analysis command failed: ${error}`);
@@ -97,7 +127,9 @@ async function main() {
 
       try {
         dbg(`Running context build for system: "${options.name}" with inputs from "${options.inputs}"`);
-        await runBuildContext(options.name, options.inputs, effectiveModel, memoryService, localPromptService);
+        await withMemoryManagement(memoryService, memoryFilePath, async () => {
+          return await runBuildContext(options.name, options.inputs, effectiveModel, memoryService, localPromptService);
+        });
         dbg("Build-context command finished successfully.");
       } catch (error) {
         dbg(`Build-context command failed: ${error}`);
@@ -135,17 +167,14 @@ async function main() {
     const knownCommands = program.commands.map(cmd => cmd.name());
 
     if (knownCommands.includes(executedCommandName)) {
-        // Save memory ONLY if a recognized command action was successfully completed
-        dbg("Command execution finished. Saving memory...");
-        await memoryService.saveMemory();
-        dbg("Memory saved. Application shutting down.");
+        // Command was successfully completed - memory is handled by withMemoryManagement
+        dbg("Command execution finished.");
     } else if (program.args.length === 0 && process.argv.length <= 2) {
         // No command provided, show help
         program.help();
     } else {
         // Command might have been handled (like --version or --help), or was unknown.
-        // If it wasn't one we defined actions for, don't save memory.
-        say("No command executed or unknown command/option. Shutting down without saving memory.");
+        say("No command executed or unknown command/option.");
     }
 
   } catch (error) {

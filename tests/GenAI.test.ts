@@ -34,7 +34,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
 
     beforeEach(() => {
         // Create mock memory instance first
-        mockMemoryServiceInstance = new MemoryService();
+        mockMemoryServiceInstance = MemoryService.fromState(undefined);
         
         // Create fresh stubs before each test
         mockInquirerPrompt = sinon.stub(inquirer, 'prompt');
@@ -173,7 +173,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
             args[1], // query
             args[3], // inputsDir
             modelName, // Passed from main/shell
-            new MemoryService(), 
+            MemoryService.fromState(undefined), 
             new PromptService(),
             utils.newGraphConfig, 
             analyzeCmd.analysisIteration, 
@@ -191,7 +191,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         // First call to stream/runGraph has initial state with specific model
         expect(mockAgentAppStream.firstCall.args[0]).to.deep.include({ modelName: specificModel });
         expect(mockAgentAppStream.secondCall.args[0]).to.be.instanceOf(LangGraphCommand);
-        expect(mockAgentAppGetState.calledOnce).to.be.true;
+        expect(mockAgentAppGetState.calledTwice).to.be.true;
         expect(mockPersistOutput.calledOnceWith('Final Analysis Specific', './data')).to.be.true;
 
         // Manual Verification step: Run specific model scenario and check debug logs for API call model.
@@ -205,7 +205,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         sinon.stub(utils, 'newGraphConfig').returns(config);
 
         
-        await askCmd.runAsk(commandInput, modelName, new MemoryService(), new PromptService());
+        await askCmd.runAsk(commandInput, modelName, MemoryService.fromState(undefined), new PromptService());
 
         // Check that agentApp.invoke was called with initialState containing the default modelName
         expect(mockAgentAppInvoke.calledOnce).to.be.true;
@@ -232,7 +232,7 @@ describe('Configurable Model Feature Tests (Mocha/Chai/Sinon)', () => {
         sinon.stub(utils, 'newGraphConfig').returns(config);
 
         // await handleDefaultCommand(commandInput, modelName);
-        await askCmd.runAsk(commandInput, modelName, new MemoryService(), new PromptService());
+        await askCmd.runAsk(commandInput, modelName, MemoryService.fromState(undefined), new PromptService());
 
         expect(mockAgentAppInvoke.calledOnce).to.be.true;
         const expectedInitialStateSpecific = {

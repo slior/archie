@@ -1,11 +1,12 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
-import { RunnableConfig } from "@langchain/core/runnables";
+import { RunnableConfig, Runnable } from "@langchain/core/runnables";
 import { echoAgentNode } from "./EchoAgentNode";
 import { analysisPrepareNode } from "./AnalysisPrepareNode";
 import { analysisInterruptNode } from "./AnalysisInterruptNode";
 import { documentRetrievalNode } from "./DocumentRetrievalNode";
 import { contextBuildingAgentNode } from './ContextBuildingAgentNode';
 import { AppRunnableConfig, dbg } from "../utils";
+import { MemoryState } from "../memory/memory_types";
 
 // Define node names as constants
 export const ECHO_AGENT = "echoAgent";
@@ -64,6 +65,9 @@ export interface AppState {
     systemName?: string;
     contextBuilderOutputContent?: string;
     contextBuilderOutputFileName?: string;
+
+    // New field for system context - store just the state data
+    system_context?: MemoryState | null;
 }
 
 function shouldTriggerAnalysis(state: AppState): boolean {
@@ -73,6 +77,9 @@ function shouldTriggerAnalysis(state: AppState): boolean {
 function shouldTriggerContextBuilding(state: AppState): boolean {
     return state.currentFlow === BUILD_CONTEXT_FLOW;
 }
+
+// Update the StateGraphNode type to match RunnableLike
+type StateGraphNode = Runnable<AppState, Partial<AppState>, RunnableConfig>;
 
 // Define the channels for the graph state, specifying how they should be updated.
 const channels = {
@@ -91,9 +98,8 @@ const channels = {
     systemName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
     contextBuilderOutputContent: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
     contextBuilderOutputFileName: { value: (x: string | undefined, y: string | undefined) => y !== undefined ? y : x, default: () => undefined },
+    system_context: { value: (x: MemoryState | null | undefined, y: MemoryState | null | undefined) => y ?? x, default: () => null },
 };
-
-type StateGraphNode = (state: AppState, config: RunnableConfig) => Promise<Partial<AppState>>;
 
 export function safeAppConfig(config: RunnableConfig): AppRunnableConfig {
     if (!config.configurable) {
@@ -206,11 +212,11 @@ export function createWorkflow(nodes: Record<string, StateGraphNode>)
 }
 
 const nodes = {
-    [ECHO_AGENT]: echoAgentNode as StateGraphNode,
-    [ANALYSIS_PREPARE]: analysisPrepareNode as StateGraphNode,
-    [ANALYSIS_INTERRUPT]: analysisInterruptNode as StateGraphNode,
-    [DOCUMENT_RETRIEVAL]: documentRetrievalNode as StateGraphNode,
-    [CONTEXT_BUILDING_AGENT]: contextBuildingAgentNode as StateGraphNode,
+    [ECHO_AGENT]: echoAgentNode as unknown as StateGraphNode,
+    [ANALYSIS_PREPARE]: analysisPrepareNode as unknown as StateGraphNode,
+    [ANALYSIS_INTERRUPT]: analysisInterruptNode as unknown as StateGraphNode,
+    [DOCUMENT_RETRIEVAL]: documentRetrievalNode as unknown as StateGraphNode,
+    [CONTEXT_BUILDING_AGENT]: contextBuildingAgentNode as unknown as StateGraphNode,
 }
 const workflow = createWorkflow(nodes);
 const checkpointer = new MemorySaver();

@@ -1,3 +1,8 @@
+
+Available system context:
+{{systemContext}}
+---------------------------------------------
+
 Based on the following conversation history: {{history}} and the context of files: [{{fileList}}], generate a final analysis summary for the user. The summary should include (if possible based on the conversation):
 - Identified assumptions
 - Identified main components involved

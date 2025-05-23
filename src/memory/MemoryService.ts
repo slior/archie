@@ -1,96 +1,130 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { MemoryState, Entity, Relation } from './types';
+import { Entity, Relationship, MemoryState, DEFAULT_MEMORY_STATE } from './memory_types';
 
-const DEFAULT_MEMORY_STATE: MemoryState = { entities: [], relations: [] };
+type ReadFileFn = (path: string) => Promise<string>;
+type WriteFileFn = (path: string, data: string) => Promise<void>;
 
 export class MemoryService {
-    private memoryFilePath: string = '';
+    private memoryFilePath: string | null = null;
     private state: MemoryState = DEFAULT_MEMORY_STATE;
+    private readFile: ReadFileFn;
+    private writeFile: WriteFileFn;
 
-    constructor() {
+    static fromState(state: MemoryState | undefined | null,
+                     readFile: ReadFileFn = (path: string) => fs.readFile(path, 'utf-8'),
+                     writeFile: WriteFileFn = (path: string, data: string) => fs.writeFile(path, data, 'utf-8')): MemoryService {
+       const ret = new MemoryService(state ?? DEFAULT_MEMORY_STATE, readFile, writeFile);
+       return ret;
+    }
+
+
+    private constructor(
+        _state: MemoryState = DEFAULT_MEMORY_STATE,
+        readFileFn: ReadFileFn = (path: string) => fs.readFile(path, 'utf-8'),
+        writeFileFn: WriteFileFn = (path: string, data: string) => fs.writeFile(path, data, 'utf-8')
+    ) {
+        this.readFile = readFileFn;
+        this.writeFile = writeFileFn;
         // Initialize with default empty state
-        this.state = JSON.parse(JSON.stringify(DEFAULT_MEMORY_STATE)); // Deep copy
+        this.state = JSON.parse(JSON.stringify(_state)); // Deep copy
     }
 
     /**
      * Loads the memory state from the specified JSON file.
      * If the file doesn't exist, initializes with an empty state.
+     * Throws an error for any I/O or parsing errors except ENOENT.
      */
     async loadMemory(filePath: string): Promise<void> {
         this.memoryFilePath = path.resolve(filePath);
         console.log(`MemoryService: Attempting to load memory from ${this.memoryFilePath}`);
         try {
-            const data = await fs.readFile(this.memoryFilePath, 'utf-8');
+            const data = await this.readFile(this.memoryFilePath);
             this.state = JSON.parse(data) as MemoryState;
-            // TODO: Add validation for the loaded state structure?
-            console.log(`MemoryService: Successfully loaded memory with ${this.state.entities.length} entities and ${this.state.relations.length} relations.`);
+            console.log(`MemoryService: Successfully loaded memory with ${this.state.entities.length} entities and ${this.state.relationships.length} relations.`);
         } catch (error: any) {
             if (error.code === 'ENOENT') {
                 console.log(`MemoryService: Memory file not found at ${this.memoryFilePath}. Initializing with empty state.`);
                 this.state = JSON.parse(JSON.stringify(DEFAULT_MEMORY_STATE)); // Deep copy
-                // Optionally save the initial empty state immediately
-                // await this.saveMemory();
             } else {
                 console.error(`MemoryService: Error loading memory file ${this.memoryFilePath}:`, error);
-                // Decide how to handle corrupted files - throw, reset, etc.
-                // For now, we reset to default to allow the application to start.
-                this.state = JSON.parse(JSON.stringify(DEFAULT_MEMORY_STATE));
+                throw error; // Re-throw for any other errors
             }
         }
     }
 
     /**
      * Saves the current memory state to the JSON file.
+     * Throws an error if the save operation fails.
      */
     async saveMemory(): Promise<void> {
         if (!this.memoryFilePath) {
-            console.error("MemoryService: Cannot save memory, file path not set (loadMemory was likely not called).");
-            return;
+            throw new Error("MemoryService: Cannot save memory, file path not set (loadMemory was likely not called).");
         }
         console.log(`MemoryService: Saving memory to ${this.memoryFilePath}`);
         try {
             const data = JSON.stringify(this.state, null, 2); // Pretty print JSON
-            await fs.writeFile(this.memoryFilePath, data, 'utf-8');
+            await this.writeFile(this.memoryFilePath, data);
             console.log(`MemoryService: Successfully saved memory.`);
         } catch (error) {
             console.error(`MemoryService: Error saving memory file ${this.memoryFilePath}:`, error);
+            throw error; // Re-throw the error
         }
     }
 
     /**
-     * Adds a new entity to the memory state.
+     * Adds or updates an entity in the memory state.
      * Ensures the entity name is unique.
      * @returns True if the entity was added, false if an entity with the same name already exists.
      */
-    addEntity(entity: Entity): boolean {
-        if (this.state.entities.some(e => e.name === entity.name)) {
-            console.warn(`MemoryService: Entity with name "${entity.name}" already exists. Cannot add duplicate.`);
+    addOrUpdateEntity(entity: Entity): boolean {
+        const existingEntity = this.state.entities.find(e => e.name === entity.name);
+        if (existingEntity) {
+            // Update existing entity
+            existingEntity.description = entity.description;
+            existingEntity.type = entity.type;
+            existingEntity.tags = Array.from(new Set([...existingEntity.tags, ...entity.tags]));
+            existingEntity.properties = { ...existingEntity.properties, ...entity.properties };
+            console.log(`MemoryService: Updated entity "${entity.name}".`);
             return false;
+        } else {
+            // Add new entity
+            this.state.entities.push(entity);
+            console.log(`MemoryService: Added entity "${entity.name}".`);
+            return true;
         }
-        this.state.entities.push(entity);
-        console.log(`MemoryService: Added entity "${entity.name}".`);
-        return true;
     }
 
     /**
-     * Adds a new relation to the memory state.
-     * Optionally checks if the source and target entities exist.
-     * @returns True if the relation was added, false otherwise (e.g., if entity check fails).
+     * Adds or updates a relationship in the memory state.
+     * Checks if the source and target entities exist.
+     * @returns True if the relationship was added/updated, false if rejected (e.g., if entity check fails).
      */
-    addRelation(relation: Relation): boolean {
-        // Optional: Check if related entities exist
-        const fromExists = this.state.entities.some(e => e.name === relation.from);
-        const toExists = this.state.entities.some(e => e.name === relation.to);
+    addOrUpdateRelationship(relationship: Relationship): boolean {
+        // Check if related entities exist
+        const fromExists = this.state.entities.some(e => e.name === relationship.from);
+        const toExists = this.state.entities.some(e => e.name === relationship.to);
         if (!fromExists || !toExists) {
-            console.warn(`MemoryService: Cannot add relation "${relation.label}" from "${relation.from}" to "${relation.to}". One or both entities do not exist.`);
+            console.warn(`MemoryService: Cannot add relation "${relationship.type}" from "${relationship.from}" to "${relationship.to}". One or both entities do not exist.`);
             return false;
         }
 
-        // Optional: Check for duplicate relations?
-        // For now, allow multiple relations of the same type between entities.
-        this.state.relations.push(relation);
-        console.log(`MemoryService: Added relation "${relation.label}" from "${relation.from}" to "${relation.to}".`);
+        // Find existing relationship
+        const existingRelationship = this.state.relationships.find(r => 
+            r.from === relationship.from && 
+            r.to === relationship.to && 
+            r.type === relationship.type
+        );
+
+        if (existingRelationship) {
+            // Update existing relationship
+            existingRelationship.properties = { ...existingRelationship.properties, ...relationship.properties };
+            console.log(`MemoryService: Updated relation "${relationship.type}" from "${relationship.from}" to "${relationship.to}".`);
+        } else {
+            // Add new relationship
+            this.state.relationships.push(relationship);
+            console.log(`MemoryService: Added relation "${relationship.type}" from "${relationship.from}" to "${relationship.to}".`);
+        }
         return true;
     }
 
@@ -102,20 +136,37 @@ export class MemoryService {
     }
 
     /**
-     * Finds relations matching specific criteria (from, to, label).
+     * Finds relationships matching specific criteria (from, to, type).
      * Any combination of criteria can be provided.
      */
-    findRelations(query: Partial<Pick<Relation, 'from' | 'to' | 'label'>>): Relation[] {
-        return this.state.relations.filter(r => {
+    findRelations(query: Partial<Pick<Relationship, 'from' | 'to' | 'type'>>): Relationship[] {
+        return this.state.relationships.filter(r => {
             const matchFrom = !query.from || r.from === query.from;
             const matchTo = !query.to || r.to === query.to;
-            const matchLabel = !query.label || r.label === query.label;
-            return matchFrom && matchTo && matchLabel;
+            const matchType = !query.type || r.type === query.type;
+            return matchFrom && matchTo && matchType;
         });
+    }
+
+    /**
+     * Returns the current memory state as a string.
+     */
+    getContextAsString(): string {
+        return JSON.stringify(this.state, null, 2);
+    }
+
+    /**
+     * Updates the current memory state with new state data.
+     * Used to sync the global memory instance with updated state from graph execution.
+     */
+    updateFromState(newState: MemoryState): void {
+        this.state = JSON.parse(JSON.stringify(newState)); // Deep copy for safety
+        console.log(`MemoryService: Updated state with ${this.state.entities.length} entities and ${this.state.relationships.length} relationships.`);
     }
 
     // Example method to get the entire state (use with caution)
     getCurrentState(): Readonly<MemoryState> {
         return this.state;
     }
-} 
+}
+

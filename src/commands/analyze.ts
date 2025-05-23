@@ -6,6 +6,7 @@ import { app as agentApp, AppState, ANALYZE_FLOW } from "../agents/graph";
 import { MemoryService } from '../memory/MemoryService';
 import { PromptService } from '../services/PromptService';
 import { dbg, say, newGraphConfig, AppRunnableConfig, persistOutput, createConfigWithPromptService } from '../utils';
+import { DEFAULT_CONTEXT_FILE_PATH } from '../config';
 // Define types needed within this command module
 export type Input = Partial<AppState> | Command;
 type ResolveFn = (...paths: string[]) => string;
@@ -34,8 +35,8 @@ type BasicReadFileFn = (path: string, encoding: string) => Promise<string>;
  * @param query The analysis query string.
  * @param inputsDir An array of input file paths for analysis context.
  * @param modelName The AI model name to use.
- * @param memoryService The memory service instance (currently unused here, but kept for potential future use).
- * @param promptService The prompt service instance (currently unused here, but kept for potential future use).
+ * @param memoryService The memory service instance for system context.
+ * @param promptService The prompt service instance.
  * @param newGraphConfigFn Injected dependency for creating graph config.
  * @param analysisIterationFn Injected dependency for handling analysis loop.
  * @param getStateFn Injected dependency for getting graph state.
@@ -47,8 +48,8 @@ export async function runAnalysis(
     query: string,
     inputsDir: string,
     modelName: string,
-    memoryService: MemoryService, // Keep signature consistent, though save is handled in main
-    promptService: PromptService, // Added promptService
+    memoryService: MemoryService,
+    promptService: PromptService,
     // Injected Dependencies for testability
     newGraphConfigFn: typeof newGraphConfig = newGraphConfig,
     analysisIterationFn: AnalysisIterationFn = analysisIteration,
@@ -56,41 +57,52 @@ export async function runAnalysis(
     getFinalOutputFn: GetFinalOutputFn = getFinalOutput,
     displayFinalOutputFn: DisplayFinalOutputFn = displayFinalOutputToUser,
     persistFinalOutputFn: PersistFinalOutputFn = persistFinalOutput
-) {
+): Promise<Partial<AppState>> {
     if (!query || !inputsDir) {
         say("Error: Analysis requires a query (--query) and a working directory (--inputs).");
-        return;
+        return {};
     }
 
-    const initialAppState: Partial<AppState> = {
-        userInput: `analyze: ${query}`, // Prefix query for clarity in graph
-        analysisHistory: [],
-        analysisOutput: "",
-        currentAnalysisQuery: query, // Store the original query
-        response: "",
-        modelName: modelName,
-        inputDirectoryPath: inputsDir,
-        currentFlow: ANALYZE_FLOW,
-    };
-    const config = newGraphConfigFn();
+    try {
 
-    dbg(`Starting analysis with thread ID: ${config.configurable.thread_id}`);
+        const initialAppState: Partial<AppState> = {
+            userInput: `analyze: ${query}`, // Prefix query for clarity in graph
+            analysisHistory: [],
+            analysisOutput: "",
+            currentAnalysisQuery: query, // Store the original query
+            response: "",
+            modelName: modelName,
+            inputDirectoryPath: inputsDir,
+            currentFlow: ANALYZE_FLOW,
+            system_context: memoryService.getCurrentState(), // Use getCurrentState() to get the memory state
+        };
+        const config = newGraphConfigFn();
 
-    let currentInput: Input = initialAppState;
-    let analysisDone = false;
-    while (!analysisDone) {
-        const { isDone, newInput } = await analysisIterationFn(currentInput, config, promptService);
-        currentInput = newInput;
-        analysisDone = isDone;
+        dbg(`Starting analysis with thread ID: ${config.configurable.thread_id}`);
+
+        let currentInput: Input = initialAppState;
+        let analysisDone = false;
+        while (!analysisDone) {
+            const { isDone, newInput } = await analysisIterationFn(currentInput, config, promptService);
+            currentInput = newInput;
+            analysisDone = isDone;
+        }
+
+        dbg("Analysis loop finished. Retrieving final output.");
+
+        const finalOutput = await getFinalOutputFn(config, getStateFn);
+        displayFinalOutputFn(finalOutput);
+        await persistFinalOutputFn(finalOutput, inputsDir);
+
+
+        // Get and return the final state for memory management
+        const finalState = await getStateFn(config);
+        dbg("runAnalysis completed.");
+        return finalState.values || {};
+    } catch (error) {
+        dbg(`Error during analysis: ${error}`);
+        throw error; // Re-throw to be handled by the caller
     }
-
-    dbg("Analysis loop finished. Retrieving final output.");
-
-    const finalOutput = await getFinalOutputFn(config, getStateFn);
-    displayFinalOutputFn(finalOutput);
-    await persistFinalOutputFn(finalOutput, inputsDir);
-
-    dbg("runAnalysis completed.");
 }
 
 /**
