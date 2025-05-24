@@ -574,7 +574,7 @@ Yes, the approach should result in the `@memory_bank.md` file being populated wi
 *   The goal was to ensure all relevant updated memory is saved at the end of the flow.
 
 **How did you approach the problem?**
-1.  Read the memory bank to understand current project context and recent work on memory features.
+1.  Read the memory bank to understand current project changes and context.
 2.  Systematically examined the analyze flow components:
     *   `main.ts` - checked global memory management
     *   `analyze.ts` - traced memory integration in the analyze command
@@ -778,3 +778,83 @@ Yes, the API is now clean and focused - `buildSystemPrompt(memoryService)` only 
         *   The tests follow the project's established patterns and use the same test libraries (Mocha, Chai).
         *   The code is minimal but provides complete coverage of the function's behavior including edge cases.
         *   Since `parseLLMResponse` is a pure function, dependency injection wasn't needed, but the test structure follows the project conventions.
+
+## Documentation Update: Analyze Flow Verification and Correction - 25-05-2025
+
+### What did you discover about the project that you didn't know before?
+
+*   The current implementation includes a `withMemoryManagement` wrapper function in `main.ts` that wasn't documented in the original flow documentation. This wrapper handles loading memory before command execution and saving it afterwards, even if the command fails.
+*   The `createConfigWithPromptService` utility function is now used to properly inject the `PromptService` into the LangGraph config, rather than directly modifying the config object.
+*   The graph routing logic has evolved to use `currentFlow` (set to `ANALYZE_FLOW`) instead of parsing the `userInput` string to determine routing decisions.
+*   The `DocumentRetrievalNode` now uses the basename of files as keys in the `inputs` Record, rather than full paths.
+*   The `AnalysisPrepareNode` has more sophisticated logic for handling user responses, including checking for "done" keywords and calling different functions (`returnFinalOutput` vs `callLLMForNextStep`) based on the user's intent.
+*   The LLM call function is now `callTheLLM` from `LLMUtils.ts`, not `callOpenAI` as mentioned in the documentation.
+
+### What was the problem you faced in this chat interaction?
+
+*   The main task was to verify that the `analyze_flow.md` documentation accurately reflected the current implementation of the analyze command flow.
+*   The user wanted me to scan the documentation and compare it with the actual code to identify any discrepancies or outdated information.
+*   I needed to understand the full flow from `main.ts` through the agent graph execution and back to memory management.
+
+### How did you approach the problem?
+
+1.  Read the memory bank to understand recent project changes and context.
+2.  Used semantic search to find the current implementation of the analyze command and related functions.
+3.  Systematically read through the key files:
+    *   `src/main.ts` - to understand the command setup and memory management wrapper
+    *   `src/commands/analyze.ts` - to understand the core analysis logic and flow
+    *   `src/agents/graph.ts` - to understand the routing logic and node structure
+    *   `src/agents/AnalysisPrepareNode.ts` - to understand how the PromptService is used
+    *   `src/agents/DocumentRetrievalNode.ts` - to understand file reading logic
+    *   `src/utils.ts` - to understand the `createConfigWithPromptService` utility
+4.  Compared the current implementation with the existing documentation to identify specific discrepancies.
+5.  Updated the `analyze_flow.md` document with accurate information reflecting the current implementation, including:
+    *   Added the memory management wrapper flow
+    *   Updated function signatures and flow descriptions
+    *   Corrected the PromptService injection mechanism
+    *   Updated the sequence diagram to reflect the current flow
+    *   Added new sections on key components, error handling, and dependency injection
+
+### Did your approach fix the problem?
+
+*   Yes, the `analyze_flow.md` document now accurately reflects the current implementation of the analyze command flow.
+*   The documentation now includes the memory management wrapper, correct function names, proper routing logic, and updated sequence diagrams.
+*   Added comprehensive sections on state management, prompt management, error handling, and dependency injection to provide a complete picture of the system.
+*   The documentation is now up-to-date and can serve as an accurate reference for understanding the analyze command implementation.
+
+## Documentation Update: Agent Graph Structure and Memory Integration - 25-05-2025
+
+### What did you discover about the project that you didn't know before?
+
+*   The context updating feature has been significantly implemented with the `system_context` field in `AppState` storing `MemoryState` data (not `MemoryService` instances as originally planned).
+*   Both `AnalysisPrepareNode` and `ContextBuildingAgentNode` have been enhanced with sophisticated memory integration, structured LLM response parsing, and knowledge graph updates.
+*   The system implements a complete memory lifecycle: load from file → inject into LLM prompts → parse structured responses → update knowledge graph → save to file.
+*   The agent nodes use `processLLMResponse()` and related functions to extract entities and relationships from LLM responses in a standardized way.
+*   The initial prompt for `AnalysisPrepareNode` includes structured output format with `<agent>` and `<system>` sections to facilitate parsing.
+*   The memory management is now handled by the `withMemoryManagement` template function in `main.ts` which centralizes the load/save lifecycle.
+
+### What was the problem you faced in this chat interaction?
+
+*   The main task was to review and update the `agent_graph.md` documentation to reflect the current implementation status based on the context updating feature implementation log and recent memory bank entries.
+*   The existing documentation was outdated and didn't reflect the significant memory management and knowledge graph integration that had been implemented.
+*   I needed to understand what parts of the context updating feature had been completed and ensure the documentation accurately described the current system behavior.
+
+### How did you approach the problem?
+
+1.  Read the implementation checklist in `context_updating.md` to understand what had been completed (items 1-9 marked as done).
+2.  Searched for `system_context` usage throughout the codebase to understand the current implementation.
+3.  Analyzed the current `AppState` structure in `graph.ts` to see the implemented fields and their types.
+4.  Reviewed how `system_context` is used in the agent nodes (`AnalysisPrepareNode` and `ContextBuildingAgentNode`).
+5.  Updated the `agent_graph.md` documentation with:
+    *   Restructured the `AppState` section with logical groupings (Core Fields, File Input System, Flow Control, Context Building Flow, System Context & Memory Management)
+    *   Updated node descriptions to reflect their current sophisticated functionality including memory integration
+    *   Added a comprehensive "Memory & Knowledge Graph Integration" section describing the complete memory lifecycle
+    *   Updated prompt descriptions to reflect structured output formats and system context injection
+    *   Added a "System Prompt Injection" section explaining how memory context is provided to LLMs
+
+### Did your approach fix the problem?
+
+*   Yes, the `agent_graph.md` documentation now accurately reflects the current implementation state with comprehensive coverage of the memory management and knowledge graph features.
+*   The documentation now explains the sophisticated memory lifecycle that has been implemented across the command handlers and agent nodes.
+*   The structured format makes it easier to understand how different parts of the system work together (file input, memory management, LLM integration, etc.).
+*   The documentation serves as an accurate reference for understanding how the agent graph currently operates with full memory integration capabilities.
