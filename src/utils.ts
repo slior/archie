@@ -3,6 +3,9 @@ import { PromptService } from './services/PromptService';
 import { RunnableConfig } from '@langchain/core/runnables';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { BaseMessageLike } from "@langchain/core/messages";
+import { AppState } from "./agents/graph";
+import { MemoryService } from './memory/MemoryService';
 
 export interface AppGraphConfigurable  {
     thread_id: string;
@@ -72,3 +75,17 @@ export function createConfigWithPromptService(baseConfig: AppRunnableConfig, pro
         },
     };
 }
+
+// /**
+//  * Creates a system prompt modifier function for use with LangGraph's prebuilt agents.
+//  * This function generates dynamic system prompts that include base prompts and context.
+//  * 
+//  * @returns A function that can be used as a stateModifier in prebuilt agent configurations
+//  */
+// export function createSystemPromptModifier(): (state: Record<string, any>) => Record<string, any> {
+//     return (state: Record<string, any>) => {
+//         // This would be used for prebuilt agents like createReactAgent
+//         // For now, just return the state as-is since we're using custom nodes
+//         return state;
+//     };
+// }

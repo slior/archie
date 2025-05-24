@@ -20,7 +20,9 @@ export const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
  * - 'user': Represents messages/inputs from the human user
  * - 'agent': Represents responses from the AI agent
  */
-export type Role = 'user' | 'agent';
+export const USER_ROLE = 'user';
+export const AGENT_ROLE = 'agent';
+export type Role = typeof USER_ROLE | typeof AGENT_ROLE;
 
 export const ANALYZE_FLOW = 'analyze';
 export const BUILD_CONTEXT_FLOW = 'build_context';

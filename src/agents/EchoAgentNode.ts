@@ -1,5 +1,5 @@
 import { AppState, safeAppConfig, } from "./graph";
-import { AppRunnableConfig } from "../utils";
+import { AppRunnableConfig, say } from "../utils";
 import { RunnableConfig } from "@langchain/core/runnables";
 
 /**
@@ -7,12 +7,12 @@ import { RunnableConfig } from "@langchain/core/runnables";
  * and puts an echoed response back into the state.
  */
 export async function echoAgentNode(state: AppState, config: RunnableConfig): Promise<Partial<AppState>> {
-    console.log("--- Echo Agent Node Running ---");
+    say("--- Echo Agent Node Running ---");
     
     const appConfig : AppRunnableConfig = safeAppConfig(config);
 
     const userInput = state.userInput;
     const echoResponse = `Echo: ${userInput}`;
-    console.log(`Echo Agent Response: ${echoResponse}`);
+    say(`Echo Agent Response: ${echoResponse}`);
     return { response: echoResponse };
 } 

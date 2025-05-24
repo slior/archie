@@ -1,8 +1,7 @@
-import { AppState, Role, safeAppConfig } from "./graph";
-import { AppGraphConfigurable, AppRunnableConfig, dbg, say } from "../utils";
-import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
-import { summarizeFiles } from './agentUtils';
-import { PromptService } from "../services/PromptService";
+import { AppState } from "./graph";
+import { AppGraphConfigurable, dbg } from "../utils";
+import { callTheLLM } from './LLMUtils';
+import { summarizeFiles, buildSystemPrompt, parseLLMResponse, processLLMResponse } from './agentUtils';
 import { RunnableConfig } from "@langchain/core/runnables";
 import { MemoryService } from "../memory/MemoryService";
 
@@ -42,46 +41,33 @@ export async function contextBuildingAgentNode(state: AppState, config?: Runnabl
     const promptContext = {
         systemName: state.systemName,
         fileSummaries: fileSummaries,
-        systemContext: memoryService.getContextAsString(), // Add system context to prompt
     };
 
     const constructedPrompt = await promptService.getFormattedPrompt("ContextBuildingAgentNode", promptType, promptContext);
 
-    // History for LLM
-    const llmHistory: HistoryMessage[] = [];
 
     try {
-        const llmResponse = await callTheLLM(llmHistory, constructedPrompt, state.modelName);
+        // Build system prompt with context injection
+        const systemPrompt = buildSystemPrompt(memoryService);
+        
+        //there's no history for this node, so we pass an empty array. The system prompt is injected at the beginning of the conversation.
+        const llmResponse = await callTheLLM([], constructedPrompt, state.modelName, systemPrompt);
 
-        // Parse LLM response for entities and relationships
-        try {
-            const parsedResponse = JSON.parse(llmResponse);
-            if (parsedResponse.entities && Array.isArray(parsedResponse.entities)) {
-                for (const entity of parsedResponse.entities) {
-                    memoryService.addOrUpdateEntity(entity);
-                }
-            }
-            if (parsedResponse.relationships && Array.isArray(parsedResponse.relationships)) {
-                for (const relationship of parsedResponse.relationships) {
-                    const success = memoryService.addOrUpdateRelationship(relationship);
-                    if (!success) {
-                        dbg(`Warning: Failed to add relationship from ${relationship.from} to ${relationship.to} of type ${relationship.type}`);
-                    }
-                }
-            }
-        } catch (parseError) {
-            dbg(`Warning: Could not parse LLM response for entities/relationships: ${parseError}`);
-        }
+        const parsedResponse = parseLLMResponse(llmResponse);
+        const updatedMemoryService = processLLMResponse(parsedResponse, memoryService);
+        dbg(`Updated Memory Service: ${updatedMemoryService.getContextAsString()}`);
+
+        const agentResponseText = parsedResponse.agentResponse || llmResponse;
 
         // Prepare output
         const outputFileName = `${state.systemName}_context.md`;
 
         // Return updated state
         return {
-            contextBuilderOutputContent: llmResponse,
+            contextBuilderOutputContent: agentResponseText,
             contextBuilderOutputFileName: outputFileName,
             userInput: "", // Clear userInput as it's been processed
-            system_context: memoryService.getCurrentState()
+            system_context: updatedMemoryService.getCurrentState()
         };
     } catch (error) {
         console.error("Error in ContextBuildingAgentNode LLM call:", error);

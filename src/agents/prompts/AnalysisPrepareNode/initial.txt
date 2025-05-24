@@ -4,51 +4,8 @@ Analyze the user query based on the following file summaries:
 
 {{fileSummaries}}
 
-Available system context:
-{{systemContext}}
-
 User's initial query: "{{firstUserMessage}}".
 
 What is the primary goal for this analysis? Ask clarifying questions if needed.
 
 ------
-# STRICT OUTPUT INSTRUCTIONS
-
-You must stricly follow the instructions for the output format.
-The output should be divided into 2 main parts, denoted by tags: <agent> ... </agent>, <system> ... </system>
-The response in the <agent> part is the actual response to the user's request. It should follow any instructions given above, and contain the entire response to that.
-
-In addition, any identified entities of the analyzed system should be output as "entities".
-Any relationships between entities should be output as "relationships".
-The output in the <system> tag should be in JSON format or the form:
-
-```
-{
-  "entities": [],
-  "relationships": []
-}
-```
-
-## System Context Definition
-
-The memory of the system is generally built as a directed graph where nodes are entities that play some role in the system, or its development.
-Examples for entities could be: services, data stores, message queues, web pages, API gateways, libraries, etc.
-Generally speaking, any technical software artifact that plays a role in some flow.
-
-Entities can also be development process artifacts - things that shape how the system look, or help communicate about its structure.
-Examples for this are requirement documents, design documents, design decisions (ADRs), bug/ticket, etc.
-
-Each entity has:
-- `name`: Mandatory. a string, has to be unique in the scope of the system.
-- `description`: a string. Can be empty.
-- `type`: mandatory. A string identifying the class of the entity. The type can be changed if an entity is updated.
-- `tags`: list of non-empty strings. Can be an empty list. When updating, new tags are added; existing tags are not removed unless explicitly part of the update operation.
-- `properties`: a dictionary of key-value pairs. Can be empty. When updating, new properties are added; existing properties with matching keys are overwritten by new values.
-
-The nodes (entities) are connected among themselves by the edges - relationships.
-Relationships are simply directed edges between the nodes, with a type.
-Each relationship has:
-- `from`: Madnatory. the name of the source of the relationship
-- `to`: Mandatory. the name of the target of the relationship.
-- `type`: Mandatory. the type of the relationship, identifying the class of relationship. a non-empty string.
-- `properties`: a dictionary of key-value pairs. Can be empty. When updating, new properties are added; existing properties with matching keys are overwritten by new values.

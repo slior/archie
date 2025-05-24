@@ -622,3 +622,159 @@ Yes, the approach should result in the `@memory_bank.md` file being populated wi
 *   **Partial**, the implementation works correctly but broke one test due to an unexpected side effect - the test expected a specific number of function calls but we added an extra one.
 *   The test failure taught us that when modifying function call patterns, we need to consider test expectations about call counts, even when the functional behavior is correct.
 *   The architectural improvement is solid, but the test suite needs adjustment to accommodate the new call pattern. 
+
+## System Prompt Injection Pattern Implementation - 24-05-2025
+
+### What did you discover about the project that you didn't know before?
+
+- The project uses a custom LangGraph StateGraph implementation rather than the prebuilt `createReactAgent` from LangGraphJS, which means the standard patterns need to be adapted
+- The project already has a sophisticated LLM calling pattern through `callTheLLM` in `LLMUtils.ts` that uses a custom `ILLMClient` interface
+- The project structure supports dependency injection for services like `PromptService` through the graph configuration
+- The existing system context/memory is stored in `AppState.system_context` as `MemoryState` and accessed through `MemoryService`
+
+### What was the problem you faced in this chat interaction?
+
+The user asked about LangGraphJS patterns for injecting system prompts to all agents. They wanted to know the recommended approach for ensuring all agents receive consistent system prompts that include their system context/memory.
+
+### How did you approach the problem?
+
+1. **Research**: Read the provided LangGraphJS documentation to understand the recommended patterns:
+   - Static system prompts via `stateModifier` with strings
+   - Dynamic system prompts via `stateModifier` functions that access state
+   - Dynamic system prompts via `prompt` functions that access config
+   - Using state vs config for context injection
+
+2. **Analysis**: Examined the project's existing LLM calling patterns to understand how to integrate system prompts:
+   - Found custom `callTheLLM` function in `LLMUtils.ts`
+   - Discovered the project uses custom StateGraph with individual agent nodes
+   - Identified that system context is available via `AppState.system_context`
+
+3. **Implementation**: Created a multi-layered solution:
+   - Modified `callTheLLM` to accept an optional `systemPrompt` parameter
+   - Created `buildSystemPrompt` helper function in `utils.ts` to generate consistent system prompts with context injection
+   - Created `createSystemPromptModifier` for potential future use with prebuilt agents
+   - Updated `AnalysisPrepareNode` and `ContextBuildingAgentNode` to use the new pattern
+
+4. **Integration**: Updated the agent nodes to pass the AppState to the LLM calling functions so system prompts can be built dynamically with context.
+
+### Did your approach fix the problem?
+
+Yes, the approach provides multiple recommended patterns for system prompt injection:
+
+1. **For the current custom StateGraph**: The `buildSystemPrompt` helper function allows each agent node to generate consistent system prompts that include the project's system context/memory
+2. **For future prebuilt agents**: The `createSystemPromptModifier` function provides the standard LangGraphJS pattern
+3. **Flexible integration**: The modified `callTheLLM` function supports optional system prompts without breaking existing functionality
+
+The solution maintains the project's existing architecture while providing a standardized way to inject system context into all LLM calls. This addresses the specific context updating feature requirements by ensuring all agents have access to the accumulated system knowledge. 
+
+## Clean Up buildSystemPrompt API - 24-05-2025 
+
+### What did you discover about the project that you didn't know before?
+
+- Learned the importance of API design principle: don't require parameters that aren't used
+- Discovered that implementation can evolve to be simpler than originally planned, leaving unused parameters
+
+### What was the problem you faced in this chat interaction?
+
+The user pointed out that the `buildSystemPrompt` function had unused parameters (`basePromptType` and `promptService`) that were required but not actually used in the implementation.
+
+### How did you approach the problem?
+
+1. **Acknowledged the issue**: Recognized that requiring unused parameters is poor API design
+2. **Simplified the function signature**: Removed the unused `basePromptType` and `promptService` parameters
+3. **Updated all callers**: Modified calls in `AnalysisPrepareNode.ts` and `ContextBuildingAgentNode.ts` to match the simplified signature
+4. **Maintained functionality**: The function still works exactly the same, just with a cleaner interface
+5. **Second improvement**: The user pointed out that all call sites already had a `MemoryService` instance, so I changed the function to accept `MemoryService` directly instead of recreating it from `AppState`
+
+### Did your approach fix the problem?
+
+Yes, the API is now clean and focused - `buildSystemPrompt(memoryService)` only requires what it actually uses and doesn't duplicate work. This eliminates the inefficiency of creating `MemoryService` instances twice and follows good dependency injection principles. 
+
+## Extract Context Preparation Logic in AnalysisPrepareNode - 24-05-2025
+
+*   **What did you discover about the project that you didn't know before?**
+        *   The context preparation logic for different prompt types (initial, followup, final) was inline within the `callLLM` function, making it harder to test and understand.
+        *   The project follows good practices of extracting reusable logic into separate functions for better modularity.
+
+*   **What was the problem you faced in this chat interaction?**
+        *   The user wanted to extract the context preparation logic from the `callLLM` function into a separate local function called `prepareContextByType`.
+        *   The inline logic was making the `callLLM` function longer and mixing responsibilities (context preparation vs LLM calling).
+
+*   **How did you approach the problem?**
+        1.  Identified the context preparation logic that switches between different prompt types (INITIAL, FINAL, FOLLOWUP).
+        2.  Created a new local function `prepareContextByType` with proper parameters:
+            - `promptType`: to determine which context to build
+            - `currentInputs`: for file summaries and file context  
+            - `history`: for getting the first user message and conversation history
+        3.  Moved all the conditional logic for building context objects into the new function.
+        4.  Replaced the inline logic in `callLLM` with a single call to `prepareContextByType`.
+        5.  Added comprehensive JSDoc documentation for the new function.
+
+*   **Did your approach fix the problem?**
+        *   Yes, the context preparation logic is now properly encapsulated in its own function.
+        *   The `callLLM` function is cleaner and more focused on its main responsibility.
+        *   The code is more modular and the extracted function could be unit tested independently if needed.
+        *   The refactoring improves code organization and maintainability without changing any functionality. 
+
+## Move buildSystemPrompt and baseSystemPrompt to agentUtils.ts - 24-05-2025
+
+*   **What did you discover about the project that you didn't know before?**
+        *   The `buildSystemPrompt` function and `baseSystemPrompt` constant were in `src/utils.ts` but are more logically related to agent functionality and LLM response processing.
+        *   These functions are only used by agent nodes (`AnalysisPrepareNode` and `ContextBuildingAgentNode`), making them better suited for the agent utilities module.
+        *   The move helps consolidate agent-related utilities in one place alongside other LLM response processing functions.
+
+*   **What was the problem you faced in this chat interaction?**
+        *   The user wanted to move `buildSystemPrompt()` and `baseSystemPrompt` from `src/utils.ts` to `src/agents/agentUtils.ts` to better organize the code.
+        *   This required updating all import statements that referenced these functions to point to the new location.
+
+*   **How did you approach the problem?**
+        1.  Used `grep_search` to find all files that reference `buildSystemPrompt` to identify where imports needed to be updated.
+        2.  Identified the current usages: `AnalysisPrepareNode.ts` and `ContextBuildingAgentNode.ts` both import from `utils.ts`.
+        3.  Added both `buildSystemPrompt` function and `baseSystemPrompt` constant to `src/agents/agentUtils.ts` at the end of the file.
+        4.  Updated the import statement in `src/agents/AnalysisPrepareNode.ts` to remove `buildSystemPrompt` from the `utils` import and add it to the existing `agentUtils` import.
+        5.  Updated the import statement in `src/agents/ContextBuildingAgentNode.ts` to remove `buildSystemPrompt` from the `utils` import and add it to the `agentUtils` import.
+        6.  Removed both functions from `src/utils.ts` and replaced them with a simpler `createSystemPromptModifier` function for potential future use with prebuilt agents.
+        7.  Ran the tests to verify all imports were working correctly.
+
+*   **Did your approach fix the problem?**
+        *   Yes, both functions were successfully moved to `src/agents/agentUtils.ts` where they logically belong with other agent and LLM utilities.
+        *   All import statements were correctly updated to reference the new location.
+        *   All 104 tests pass, confirming that the refactoring was successful and didn't break any existing functionality.
+        *   The code organization is now more logical with agent-specific utilities consolidated in the agents module.
+
+## Create Comprehensive Tests for parseLLMResponse in agentUtils.test.ts - 25-05-2025
+
+*   **What did you discover about the project that you didn't know before?**
+        *   The `parseLLMResponse` function already had comprehensive test coverage in `AnalysisPrepareNode.test.ts`, but needed dedicated tests in a new file since the function was moved to `agentUtils.ts`.
+        *   The project follows consistent test patterns using Mocha, Chai, and follows dependency injection principles even for pure functions.
+        *   The `parseLLMResponse` function handles null entities/relationships by treating them as invalid (non-array) and generating appropriate warnings.
+
+*   **What was the problem you faced in this chat interaction?**
+        *   The user wanted dedicated tests for the `parseLLMResponse()` function in a new file called `agentUtils.test.ts`.
+        *   The tests needed to follow the same patterns as other tests in the project, use dependency injection for mocks, and use the same test libraries.
+        *   The requirement was to write minimal code while covering all cases comprehensively.
+
+*   **How did you approach the problem?**
+        1.  Examined existing test files to understand the project's test patterns and libraries (Mocha, Chai, Sinon).
+        2.  Reviewed the existing `parseLLMResponse` tests in `AnalysisPrepareNode.test.ts` to understand the comprehensive coverage already implemented.
+        3.  Created a new `tests/agentUtils.test.ts` file following the same patterns but with minimal, focused code.
+        4.  Covered all the essential test cases:
+            - Complete response with both agent and system sections
+            - Response with only agent section
+            - Response with only system section  
+            - Response without any tags (fallback)
+            - Malformed JSON in system section
+            - Missing properties (provides defaults)
+            - Non-array entities/relationships
+            - Whitespace trimming
+            - Invalid entities and relationships with warnings
+            - Additional edge cases: empty string response, non-object JSON, null entities/relationships
+        5.  Initially had one failing test due to incorrect expectations about null handling, then fixed it by understanding that null entities/relationships generate warnings.
+        6.  Verified all tests pass and don't interfere with the existing test suite.
+
+*   **Did your approach fix the problem?**
+        *   Yes, created a comprehensive test suite with 12 test cases covering all scenarios for `parseLLMResponse`.
+        *   All tests pass, including the new ones and all existing tests (116 total tests passing).
+        *   The tests follow the project's established patterns and use the same test libraries (Mocha, Chai).
+        *   The code is minimal but provides complete coverage of the function's behavior including edge cases.
+        *   Since `parseLLMResponse` is a pure function, dependency injection wasn't needed, but the test structure follows the project conventions.

@@ -1,237 +1,54 @@
-import { AppState, safeAppConfig } from "./graph";
+import { AGENT_ROLE, AppState, USER_ROLE } from "./graph";
 import { AppGraphConfigurable, dbg, say } from "../utils";
-import { callTheLLM, HistoryMessage } from './LLMUtils'; // Import HistoryMessage from LLMUtils
+import { callTheLLM, HistoryMessage } from './LLMUtils';
 
-import { PromptService } from "../services/PromptService"; // Added PromptService import
-import { RunnableConfig } from "@langchain/core/runnables"; // Import RunnableConfig
-import { summarizeFiles } from './agentUtils'; // Import summarizeFiles from agentUtils
+import { RunnableConfig } from "@langchain/core/runnables";
+import { parseLLMResponse, processLLMResponse, summarizeFiles, buildSystemPrompt } from './agentUtils'; // Import summarizeFiles from agentUtils
 import { MemoryService } from "../memory/MemoryService";
-import { Entity, Relationship } from "../memory/memory_types"; // Import proper types
+import { PromptService } from "../services/PromptService";
 
-const PROMPT_TYPE_INITIAL = 'initial';
-const PROMPT_TYPE_FOLLOWUP = 'followup';
-const PROMPT_TYPE_FINAL = 'final';
 /**
  * Represents the type of prompt to generate for the LLM.
  * - PROMPT_TYPE_INITIAL: Used for the first interaction to understand the user's analysis goals
  * - PROMPT_TYPE_FOLLOWUP: Used for continuing the conversation and gathering more details
  * - PROMPT_TYPE_FINAL: Used to generate the final analysis summary
  */
+const PROMPT_TYPE_INITIAL = 'initial';
+const PROMPT_TYPE_FOLLOWUP = 'followup';
+const PROMPT_TYPE_FINAL = 'final';
 
 /**
- * Interface representing the result of parsing an LLM response with agent and system sections.
+ * Prepares the context object for LLM prompts based on the prompt type.
+ * 
+ * @param promptType - Type of prompt to generate (initial, followup, or final)
+ * @param currentInputs - Record of filenames and their contents
+ * @param history - Array of conversation messages
+ * @returns Context object with appropriate data for the specified prompt type
  */
-export interface ParsedLLMResponse {
-    /** The agent's response to the user (content from <agent> tag) */
-    agentResponse: string;
-    /** Parsed system context containing entities and relationships (content from <system> tag) */
-    systemContext: {
-        entities: Entity[];
-        relationships: Relationship[];
-    } | null;
-    /** Any warnings encountered during parsing */
-    warnings: string[];
-}
-
-/**
- * Parses an LLM response that may contain <agent> and <system> tags.
- * 
- * The function expects the response to be in the format:
- * ```
- * <agent>
- * Agent response content here
- * </agent>
- * 
- * <system>
- * {
- *   "entities": [...],
- *   "relationships": [...]
- * }
- * </system>
- * ```
- * 
- * If either section is missing, the function will warn but not fail.
- * If the entire response lacks both tags, it treats the whole response as the agent response.
- * 
- * @param llmResponse - The raw response string from the LLM
- * @returns ParsedLLMResponse object containing the parsed agent response, system context, and any warnings
- */
-export function parseLLMResponse(llmResponse: string): ParsedLLMResponse {
-    const result: ParsedLLMResponse = {
-        agentResponse: '',
-        systemContext: null,
-        warnings: []
-    };
-
-    // Check if the response contains the expected tags
-    const hasAgentTag = llmResponse.includes('<agent>') && llmResponse.includes('</agent>');
-    const hasSystemTag = llmResponse.includes('<system>') && llmResponse.includes('</system>');
-
-    if (!hasAgentTag && !hasSystemTag) {
-        // No tags found, treat entire response as agent response
-        result.agentResponse = llmResponse.trim();
-        result.warnings.push('No <agent> or <system> tags found in LLM response. Treating entire response as agent response.');
-        return result;
+function prepareContextByType(
+    promptType: 'initial' | 'followup' | 'final',
+    currentInputs: Record<string, string>,
+    history: HistoryMessage[]
+): Record<string, any> {
+    if (promptType === PROMPT_TYPE_INITIAL) {
+        return {
+            fileSummaries: summarizeFiles(currentInputs),
+            firstUserMessage: history.find(m => m.role === USER_ROLE)?.content || '(No initial query found)'
+        };
+    } else if (promptType === PROMPT_TYPE_FINAL) {
+        const filesContext = Object.entries(currentInputs)
+                                    .map(([fileName, content]) => `File: ${fileName}\nContent:\n${content}`)
+                                    .join("\n\n---\n\n");
+        return {
+            history: JSON.stringify(history),
+            fileList: filesContext
+        };
+    } else { // PROMPT_TYPE_FOLLOWUP
+        return {
+            conversationHistory: history,
+            fileSummaries: summarizeFiles(currentInputs)
+        };
     }
-
-    // Extract agent section
-    if (hasAgentTag) {
-        const agentMatch = llmResponse.match(/<agent>([\s\S]*?)<\/agent>/);
-        if (agentMatch) {
-            result.agentResponse = agentMatch[1].trim();
-        } else {
-            result.warnings.push('Found <agent> tag but could not extract content properly.');
-        }
-    } else {
-        result.warnings.push('No <agent> section found in LLM response.');
-    }
-
-    // Extract system section
-    if (hasSystemTag) {
-        const systemMatch = llmResponse.match(/<system>([\s\S]*?)<\/system>/);
-        if (systemMatch) {
-            const systemContent = systemMatch[1].trim();
-            try {
-                // Try to parse as JSON
-                const parsed = JSON.parse(systemContent);
-                
-                // Validate the structure
-                if (typeof parsed === 'object' && parsed !== null) {
-                    // Process entities with defaults for missing fields
-                    const entities: Entity[] = [];
-                    if (Array.isArray(parsed.entities)) {
-                        for (const entity of parsed.entities) {
-                            if (typeof entity === 'object' && entity !== null && entity.name && entity.type) {
-                                entities.push({
-                                    name: entity.name,
-                                    description: entity.description || '',
-                                    type: entity.type,
-                                    tags: Array.isArray(entity.tags) ? entity.tags : [],
-                                    properties: entity.properties && typeof entity.properties === 'object' ? entity.properties : {}
-                                });
-                            } else {
-                                result.warnings.push(`Skipping invalid entity: missing required name or type fields.`);
-                            }
-                        }
-                    } else if (parsed.entities !== undefined) {
-                        result.warnings.push('System context entities is not an array. Using empty array.');
-                    }
-                    
-                    // Process relationships with defaults for missing fields
-                    const relationships: Relationship[] = [];
-                    if (Array.isArray(parsed.relationships)) {
-                        for (const relationship of parsed.relationships) {
-                            if (typeof relationship === 'object' && relationship !== null && 
-                                relationship.from && relationship.to && relationship.type) {
-                                relationships.push({
-                                    from: relationship.from,
-                                    to: relationship.to,
-                                    type: relationship.type,
-                                    properties: relationship.properties && typeof relationship.properties === 'object' ? relationship.properties : {}
-                                });
-                            } else {
-                                result.warnings.push(`Skipping invalid relationship: missing required from, to, or type fields.`);
-                            }
-                        }
-                    } else if (parsed.relationships !== undefined) {
-                        result.warnings.push('System context relationships is not an array. Using empty array.');
-                    }
-                    
-                    result.systemContext = {
-                        entities,
-                        relationships
-                    };
-                } else {
-                    result.warnings.push('System context is not a valid object. Ignoring system context.');
-                }
-            } catch (parseError) {
-                result.warnings.push(`Failed to parse system context as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown error'}. Ignoring system context.`);
-            }
-        } else {
-            result.warnings.push('Found <system> tag but could not extract content properly.');
-        }
-    } else if (hasAgentTag) {
-        // Only warn about missing system tag if agent tag was present (indicating structured response was expected)
-        result.warnings.push('No <system> section found in LLM response.');
-    }
-
-    return result;
-}
-
-/**
- * Processes an LLM response by logging warnings and updating memory service.
- * 
- * This function handles the complete processing of a parsed LLM response:
- * - Logs any warnings encountered during parsing
- * - Updates the memory service with entities and relationships from system context
- * 
- * @param parsedResponse - The parsed LLM response containing agent response, system context, and warnings
- * @param memoryService - The memory service instance to update
- * @returns The updated memory service instance (same instance, modified in place)
- */
-export function processLLMResponse(
-    parsedResponse: ParsedLLMResponse,
-    memoryService: MemoryService
-): MemoryService {
-    // Log any warnings from parsing
-    if (parsedResponse.warnings.length > 0) {
-        parsedResponse.warnings.forEach(warning => {
-            dbg(`Warning: ${warning}`);
-        });
-    }
-    
-    // Update memory service with entities and relationships if present
-    return updateMemoryWithSystemContext(memoryService, parsedResponse.systemContext);
-}
-
-/**
- * Updates the memory service with entities and relationships from parsed system context.
- * 
- * This function processes the system context extracted from an LLM response and adds
- * the entities and relationships to the provided memory service. It handles errors
- * gracefully and provides debug logging for successful operations and warnings.
- * 
- * @param memoryService - The memory service instance to update
- * @param systemContext - The parsed system context containing entities and relationships, or null
- * @returns The updated memory service instance (same instance, modified in place)
- */
-export function updateMemoryWithSystemContext(
-    memoryService: MemoryService,
-    systemContext: ParsedLLMResponse['systemContext']
-): MemoryService {
-    if (!systemContext) {
-        return memoryService;
-    }
-
-    // Add entities to memory service
-    if (systemContext.entities.length > 0) {
-        for (const entity of systemContext.entities) {
-            try {
-                memoryService.addOrUpdateEntity(entity);
-                dbg(`Added/updated entity: ${entity.name} (type: ${entity.type})`);
-            } catch (error) {
-                dbg(`Warning: Failed to add entity ${entity.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
-        }
-    }
-    
-    // Add relationships to memory service
-    if (systemContext.relationships.length > 0) {
-        for (const relationship of systemContext.relationships) {
-            try {
-                const success = memoryService.addOrUpdateRelationship(relationship);
-                if (success) {
-                    dbg(`Added relationship: ${relationship.from} --[${relationship.type}]--> ${relationship.to}`);
-                } else {
-                    dbg(`Warning: Failed to add relationship from ${relationship.from} to ${relationship.to} of type ${relationship.type}`);
-                }
-            } catch (error) {
-                dbg(`Warning: Error adding relationship from ${relationship.from} to ${relationship.to}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
-        }
-    }
-
-    return memoryService;
 }
 
 /**
@@ -241,6 +58,7 @@ export function updateMemoryWithSystemContext(
  * @param files - Record of filenames and their contents that provide context
  * @param promptType - Type of prompt to generate (initial, followup, or final)
  * @param modelName - Name of the LLM model to use
+ * @param state - The current AppState for building system prompts
  * @returns Promise resolving to the LLM's response string
  * @throws Error if the LLM call fails or there are API issues
  */
@@ -250,7 +68,8 @@ async function callLLM(
     promptType: 'initial' | 'followup' | 'final',
     modelName: string,
     memoryService: MemoryService,
-    promptService?: PromptService
+    promptService?: PromptService,
+    state?: AppState
 ): Promise<string> {
     
     dbg(`callLLM received promptService: ${!!promptService}, using promptType: ${promptType}`);
@@ -262,41 +81,16 @@ async function callLLM(
         throw new Error("PromptService is required but not provided to callLLM.");
     }
 
-    let context: Record<string, any> = {};
     const currentInputs = inputs ?? {};
-    const filesContext = Object.entries(currentInputs)
-        .map(([fileName, content]) => `File: ${fileName}\nContent:\n${content}`)
-        .join("\n\n---\n\n");
+    const context = prepareContextByType(promptType, currentInputs, history);
 
-    if (promptType === PROMPT_TYPE_INITIAL) {
-        context = {
-            fileSummaries: summarizeFiles(currentInputs),
-            firstUserMessage: history.find(m => m.role === 'user')?.content || '(No initial query found)'
-        };
-    } else if (promptType === PROMPT_TYPE_FINAL) {
-        context = {
-            history: JSON.stringify(history),
-            fileList: filesContext
-        };
-    } else { // PROMPT_TYPE_FOLLOWUP
-        context = {
-            fileList: filesContext
-        };
-    }
-
-
-    context.systemContext = memoryService.getContextAsString();
-    // dbg(`Context: ${JSON.stringify(context)}`);
-    dbg(`System Context: ${memoryService.getContextAsString()}`);
     const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptType, context);
-    // dbg(`Prompt Instruction (from PromptService): ${constructedPrompt}`);
-
-    try {
-        return await callTheLLM(history, constructedPrompt, modelName);
-    } catch (error) {
-        console.error("Error in callLLM calling callTheLLM:", error);
-        throw new Error("LLM communication failed. Please check logs or API key.");
-    }
+    
+    // Build system prompt with context injection
+    const systemPrompt = state ? buildSystemPrompt(memoryService) : undefined;
+    
+    // Call LLM with system prompt
+    return await callTheLLM(history, constructedPrompt, modelName, systemPrompt);
 }
 
 /**
@@ -326,7 +120,7 @@ async function returnFinalOutput(
     try {
         const modelName = state.modelName; 
         const memoryService = MemoryService.fromState(state.system_context);
-        const finalOutput = await callLLM(currentHistory, state.inputs, PROMPT_TYPE_FINAL, modelName, memoryService, promptService);
+        const finalOutput = await callLLM(currentHistory, state.inputs, PROMPT_TYPE_FINAL, modelName, memoryService, promptService, state);
         const finalAgentMsg = { role: 'agent' as const, content: "Okay, generating the final solution description." };
 
         return {
@@ -436,9 +230,9 @@ async function callLLMForNextStep(
     try {
         const modelName = state.modelName;
         // Determine prompt type based on history
-        const determinedPromptType = currentHistory.length <= 1 && currentHistory.every(m => m.role === 'user') ? PROMPT_TYPE_INITIAL : PROMPT_TYPE_FOLLOWUP;
+        const determinedPromptType = currentHistory.length <= 1 && currentHistory.every(m => m.role === USER_ROLE) ? PROMPT_TYPE_INITIAL : PROMPT_TYPE_FOLLOWUP;
         const memoryService = MemoryService.fromState(state.system_context);
-        const rawLLMResponse = await callLLM(currentHistory, state.inputs, determinedPromptType, modelName, memoryService, promptService);
+        const rawLLMResponse = await callLLM(currentHistory, state.inputs, determinedPromptType, modelName, memoryService, promptService, state);
         
         // Parse the LLM response to extract agent response and system context
         const parsedResponse = parseLLMResponse(rawLLMResponse);
@@ -449,7 +243,7 @@ async function callLLMForNextStep(
         
         // Use the parsed agent response (or fallback to raw response if parsing failed)
         const agentResponseText = parsedResponse.agentResponse || rawLLMResponse;
-        const agentMsg = { role: 'agent' as const, content: agentResponseText };
+        const agentMsg: HistoryMessage = { role: AGENT_ROLE, content: agentResponseText };
 
         // Prepare the state update to be returned for the interrupt node
         const stateUpdate: Partial<AppState> = {
@@ -494,25 +288,12 @@ export async function analysisPrepareNode(state: AppState, config?: RunnableConf
         throw new Error("Critical Error: Input documents (state.inputs) were not found or are empty. Analysis cannot proceed.");
     }
 
-    // Summarize input files
-    // const fileSummaries = summarizeFiles(state.inputs);
-
-    // const memoryService = MemoryService.fromState(state.system_context);
-
-    // Prepare LLM call
-    // const promptType = 'analysis_prepare';
-    // const promptContext = {
-    //     query: state.currentAnalysisQuery,
-    //     fileSummaries: fileSummaries,
-    //     systemContext: memoryService.getContextAsString(), // Add system context to prompt
-    // };
-
     const currentUserInput = state.userInput;
     let currentHistory: HistoryMessage[] = state.analysisHistory || [];
     
     currentHistory = addUserInputToHistory(currentHistory, currentUserInput);
     
-    const lastUserMessageContent = currentHistory.filter(m => m.role === 'user').pop()?.content || "";
+    const lastUserMessageContent = currentHistory.filter(m => m.role === USER_ROLE).pop()?.content || "";
     if (userIsDone(lastUserMessageContent)) {
         return await returnFinalOutput(currentHistory, lastUserMessageContent, state, promptService);
     }
@@ -522,42 +303,4 @@ export async function analysisPrepareNode(state: AppState, config?: RunnableConf
 
     return llmResponse;
 
-    // const constructedPrompt = await promptService.getFormattedPrompt("AnalysisPrepareNode", promptType, promptContext);
-
-    // // History for LLM
-    // const llmHistory: HistoryMessage[] = [];
-
-    // try {
-    //     // Call LLM
-    //     const llmResponse = await callTheLLM(llmHistory, constructedPrompt, state.modelName);
-
-    //     // Parse LLM response for entities and relationships
-    //     try {
-    //         const parsedResponse = JSON.parse(llmResponse);
-    //         if (parsedResponse.entities && Array.isArray(parsedResponse.entities)) {
-    //             for (const entity of parsedResponse.entities) {
-    //                 memoryService.addOrUpdateEntity(entity);
-    //             }
-    //         }
-    //         if (parsedResponse.relationships && Array.isArray(parsedResponse.relationships)) {
-    //             for (const relationship of parsedResponse.relationships) {
-    //                 const success = memoryService.addOrUpdateRelationship(relationship);
-    //                 if (!success) {
-    //                     dbg(`Warning: Failed to add relationship from ${relationship.from} to ${relationship.to} of type ${relationship.type}`);
-    //                 }
-    //             }
-    //         }
-    //     } catch (parseError) {
-    //         dbg(`Warning: Could not parse LLM response for entities/relationships: ${parseError}`);
-    //     }
-
-    //     // Return updated state
-    //     return {
-    //         analysisOutput: llmResponse,
-    //         userInput: "" // Clear userInput as it's been processed
-    //     };
-    // } catch (error) {
-    //     console.error("Error in AnalysisPrepareNode LLM call:", error);
-    //     throw new Error("LLM communication failed during analysis preparation.");
-    // }
 }

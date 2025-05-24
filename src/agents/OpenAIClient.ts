@@ -39,7 +39,7 @@ export class OpenAIClient implements ILLMClient {
             this.openai = new OpenAI({ apiKey: this.apiKey });
         }
         else {
-            console.log(`Using base URL: ${baseURL}`);
+            dbg(`Using base URL: ${baseURL}`);
             this.openai = new OpenAI({ apiKey: this.apiKey, baseURL: baseURL });
         }
     }

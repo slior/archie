@@ -2,7 +2,7 @@ import * as dotenv from 'dotenv';
 import { dbg } from "../utils";
 import { OpenAIClient } from './OpenAIClient';
 import { ILLMClient, ChatMessage } from './ILLMClient';
-import { Role } from './graph';
+import { AGENT_ROLE, Role } from './graph';
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +40,7 @@ export function getLLMClient(): ILLMClient {
  * @param history The conversation history, using internal roles ('user', 'agent').
  * @param prompt The specific user prompt/instruction for this turn.
  * @param modelName Optional model name to override the provider's default.
+ * @param systemPrompt Optional system prompt to inject at the beginning of the conversation.
  * @returns The content of the LLM's response.
  * @throws Error if API key is missing, API call fails, or response is empty.
  */
@@ -47,16 +48,25 @@ export async function callTheLLM(
     // Use internal Role type for input history
     history: HistoryMessage[], // Updated to use the exported HistoryMessage type
     prompt: string,
-    modelName?: string
+    modelName?: string,
+    systemPrompt?: string
 ): Promise<string> {
     const client = getLLMClient();
 
     // Map internal roles ('user', 'agent') to standard roles ('user', 'assistant') 
     // expected by the client interface (ChatMessage type)
     const mappedHistory: ChatMessage[] = history.map(msg => ({
-        role: msg.role === 'agent' ? 'assistant' : 'user',
+        role: msg.role === AGENT_ROLE ? 'assistant' : 'user',
         content: msg.content
     }));
+
+    // If system prompt is provided, add it as the first message
+    if (systemPrompt) {
+        mappedHistory.unshift({
+            role: 'system',
+            content: systemPrompt
+        });
+    }
 
     // Determine the effective model name. Pass undefined to let clients handle defaults.
     const effectiveModel = modelName && modelName.trim() !== '' ? modelName : undefined;

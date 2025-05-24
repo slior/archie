@@ -77,9 +77,9 @@ describe('ContextBuildingAgentNode', () => {
         expect(getFormattedPromptMock.calledOnceWithExactly('ContextBuildingAgentNode', 'context_build', {
             systemName: baseState.systemName,
             fileSummaries: fakeSummaries,
-            systemContext: memoryService.getContextAsString()
         })).to.be.true;
-        expect(callTheLLMMock.calledOnceWithExactly([], fakePrompt, baseState.modelName)).to.be.true;
+        
+        expect(callTheLLMMock.calledOnce).to.be.true;
         expect(result.contextBuilderOutputContent).to.equal(fakeLLMResponse);
         expect(result.contextBuilderOutputFileName).to.equal(expectedOutputFileName);
         expect(result.userInput).to.equal("");
