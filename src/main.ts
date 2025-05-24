@@ -28,6 +28,25 @@ const memoryService = MemoryService.fromState(undefined); // Instantiate MemoryS
  * Template method for executing commands with automatic memory management.
  * Handles loading memory before command execution and saving updated memory after.
  */
+/**
+ * Wraps a command's execution with memory management logic.
+ * This function ensures that memory is loaded from the specified file path
+ * before the command handler is executed, and that the memory is saved
+ * back to the file after the command handler completes (or errors).
+ * If the command handler returns a state object containing `system_context`,
+ * the `memoryService` will be updated with this context before saving.
+ *
+ * @param memoryService - The instance of MemoryService to use for loading and saving memory.
+ * @param memoryFilePath - The path to the file from which to load and to which to save memory.
+ * @param commandHandler - An asynchronous function that executes the core command logic.
+ *                         It is expected to return a Promise that resolves to the final state
+ *                         of the application after the command, or any other value if state
+ *                         update is not applicable. If the resolved value has a `system_context`
+ *                         property, it will be used to update the memory service.
+ * @returns A Promise that resolves when the command handler has completed and memory
+ *          has been saved, or rejects if an error occurs during command execution
+ *          (note: memory saving is attempted even in case of an error in `commandHandler`).
+ */
 async function withMemoryManagement(
     memoryService: MemoryService,
     memoryFilePath: string,

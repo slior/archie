@@ -95,6 +95,7 @@ sequenceDiagram
     withMemoryMgmt->>withMemoryMgmt: Save memory to file
     withMemoryMgmt->>Main: Complete
     Main->>Main: Exit
+```
 
 ## Detailed Step-by-Step Description
 

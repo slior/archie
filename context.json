@@ -1,0 +1,61 @@
+{
+  "entities": [
+    {
+      "name": "User",
+      "description": "Initiates commands",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "CLI",
+      "description": "Processes and resolves commands",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "Command Handlers (MoveCmd, WallCmd, UndoCmd)",
+      "description": "Validate and execute specific commands",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "Game Engine",
+      "description": "Manages game state, validations, and interactions",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "Board",
+      "description": "Handles board operations and validations",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "State",
+      "description": "Manages the current game state and updates",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "GameState",
+      "description": "Represents the state of the game at a given point",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    },
+    {
+      "name": "GameHistory",
+      "description": "Stores and manages the history of game states for undo operations",
+      "type": "Component",
+      "tags": [],
+      "properties": {}
+    }
+  ],
+  "relationships": []
+}
