@@ -858,3 +858,173 @@ Yes, the API is now clean and focused - `buildSystemPrompt(memoryService)` only 
 *   The documentation now explains the sophisticated memory lifecycle that has been implemented across the command handlers and agent nodes.
 *   The structured format makes it easier to understand how different parts of the system work together (file input, memory management, LLM integration, etc.).
 *   The documentation serves as an accurate reference for understanding how the agent graph currently operates with full memory integration capabilities.
+
+## Create Code Map for Commands Directory - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned the detailed structure and functionality of the three command files in `src/commands/`
+- Discovered that `analyze.ts` is the most complex command with 254 lines, implementing a sophisticated multi-turn analysis workflow with user interaction loops
+- Found that `buildContext.ts` provides system context generation functionality from input documents 
+- Confirmed that `ask.ts` is the simplest command for single-turn AI interactions
+- All commands follow consistent dependency injection patterns for testability and integrate with the LangGraph agent system
+
+### What was the problem you faced in this chat interaction?
+- The user requested creation of a code map for the `src/commands` directory following the LLM Code Maps specification from the notepad
+- Needed to analyze the three TypeScript files to understand their purpose, functionality, and relationships
+- Had to create the proper directory structure (`docs/codemaps/commands/`) and generate a comprehensive `codemap.md` file
+
+### How did you approach the problem?
+1. Read the memory bank file as required by workspace rules to understand project context
+2. Analyzed each of the three command files (`analyze.ts`, `buildContext.ts`, `ask.ts`) to understand their functionality
+3. Identified key functions, classes, and architectural patterns within each file
+4. Created the necessary directory structure following the specification
+5. Generated a comprehensive code map with all required sections: Purpose, Files, Architecture, Interactions, and Dependencies
+6. Followed the exact format specified in the LLM Code Maps instructions with proper markdown formatting and cross-linking
+
+### Did your approach fix the problem?
+- Yes, successfully created a comprehensive code map at `docs/codemaps/commands/codemap.md` following the LLM Code Maps specification
+- The code map provides clear documentation of the directory's purpose, detailed descriptions of each file and their key functions, and explains the architectural patterns and dependencies
+- Properly documented the commands' integration with the LangGraph agent system, memory service, and prompt service components
+
+## Create Code Map for Memory Directory - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned the detailed structure and functionality of the memory management system in `src/memory/`
+- Discovered that `MemoryService.ts` is a comprehensive 220-line service class implementing a knowledge graph with entities and relationships
+- Found that the system uses a sophisticated persistence layer with JSON file storage and dependency injection for testability
+- Confirmed that `memory_types.ts` provides clean TypeScript interfaces for `Entity`, `Relationship`, and `MemoryState` 
+- The memory system integrates deeply with the LLM agents through system prompt injection and automatic knowledge graph updates from parsed LLM responses
+
+### What was the problem you faced in this chat interaction?
+- The user requested creation of a code map for the `src/memory` directory following the same LLM Code Maps specification used for the commands directory
+- Needed to analyze the two TypeScript files to understand their purpose, functionality, and relationships with the broader system
+- Had to create the proper directory structure (`docs/codemaps/memory/`) and generate a comprehensive `codemap.md` file
+
+### How did you approach the problem?
+1. Analyzed both files in the memory directory (`MemoryService.ts` and `memory_types.ts`) to understand their functionality
+2. Identified the key methods and interfaces within each file and their responsibilities
+3. Created the necessary directory structure following the LLM Code Maps specification
+4. Generated a comprehensive code map with all required sections: Purpose, Files, Architecture, Interactions, and Dependencies
+5. Documented the memory system's role as a knowledge graph manager with persistence and its integration with the LLM agent system
+6. Followed the exact format specified in the LLM Code Maps instructions with proper markdown formatting and cross-linking
+
+### Did your approach fix the problem?
+- Yes, successfully created a comprehensive code map at `docs/codemaps/memory/codemap.md` following the LLM Code Maps specification
+- The code map provides clear documentation of the memory system's purpose as a knowledge graph manager with JSON persistence
+- Properly documented the service-oriented architecture with dependency injection and the clean separation between data types and operations
+- Explained the memory system's integration with command handlers, LLM agents, and response parsing functions for automatic knowledge graph updates
+
+## Create Code Map for Services Directory - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned the detailed structure and functionality of the prompt management system in `src/services/`
+- Discovered that `PromptService.ts` is a sophisticated 123-line service class implementing configurable prompt management with fallback strategies
+- Found that the system uses a template pattern with `{{key}}` placeholder replacement and lazy-loading of custom configurations
+- Confirmed that `promptTypes.ts` provides clean TypeScript interfaces for `PromptConfigEntry`, `AgentPromptsConfig`, and `FullPromptsConfig`
+- The prompt service uses extensive dependency injection for file operations to enable comprehensive testing
+
+### What was the problem you faced in this chat interaction?
+- The user requested creation of a code map for the `src/services` directory following the same LLM Code Maps specification used for previous directories
+- Needed to analyze the two TypeScript files to understand their purpose, functionality, and relationships with the LLM agent system
+- Had to create the proper directory structure (`docs/codemaps/services/`) and generate a comprehensive `codemap.md` file
+
+### How did you approach the problem?
+1. Analyzed both files in the services directory (`PromptService.ts` and `promptTypes.ts`) to understand their functionality
+2. Identified the key methods and interfaces within each file and their responsibilities
+3. Created the necessary directory structure following the LLM Code Maps specification
+4. Generated a comprehensive code map with all required sections: Purpose, Files, Architecture, Interactions, and Dependencies
+5. Documented the prompt service's role as a configurable template manager with fallback strategies and its integration with the LLM agent system
+6. Followed the exact format specified in the LLM Code Maps instructions with proper markdown formatting and cross-linking
+
+### Did your approach fix the problem?
+- Yes, successfully created a comprehensive code map at `docs/codemaps/services/codemap.md` following the LLM Code Maps specification
+- The code map provides clear documentation of the prompt management system's purpose as a configurable template service with fallback strategies
+- Properly documented the dependency injection architecture for testability and the template parameter replacement system
+- Explained the service's integration with agent nodes through the LangGraph configuration system and CLI prompt configuration options
+
+## Create Code Map for Agents Directory - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned the comprehensive structure of the LangGraph-based agent system in `src/agents/`
+- Discovered that this is the most complex directory with 11 TypeScript files implementing a sophisticated conversational AI architecture
+- Found that `graph.ts` defines the central AppState interface and StateGraph with conditional routing between specialized nodes
+- Confirmed that `AnalysisPrepareNode.ts` is the largest file (306 lines) implementing multi-turn analysis conversations with memory integration
+- The system uses a provider abstraction pattern with `ILLMClient` interface and `OpenAIClient` implementation for LLM integration
+- Comprehensive utilities in `agentUtils.ts` (321 lines) handle LLM response parsing, memory updates, and system prompt construction
+
+### What was the problem you faced in this chat interaction?
+- The user requested creation of a code map for the `src/agents` directory following the same LLM Code Maps specification
+- This directory was significantly more complex than previous ones with 11 files including interfaces, utilities, agent nodes, and the main graph structure
+- Needed to understand the LangGraph architecture, conditional routing, AppState flow, and LLM integration patterns
+- Had to create the proper directory structure (`docs/codemaps/agents/`) and generate a comprehensive `codemap.md` file covering all components
+
+### How did you approach the problem?
+1. Analyzed key files starting with `graph.ts` to understand the central AppState and StateGraph structure
+2. Examined `LLMUtils.ts` and related files to understand the LLM integration and provider abstraction patterns
+3. Reviewed `agentUtils.ts` to understand the comprehensive utilities for response parsing and memory management
+4. Identified the purpose and functionality of each agent node and utility file
+5. Created the necessary directory structure following the LLM Code Maps specification
+6. Generated a comprehensive code map with all required sections: Purpose, Files, Architecture, Interactions, and Dependencies
+7. Documented the sophisticated LangGraph-based conversational AI architecture with conditional routing and memory integration
+8. Followed the exact format specified in the LLM Code Maps instructions with proper markdown formatting and cross-linking
+
+### Did your approach fix the problem?
+- Yes, successfully created a comprehensive code map at `docs/codemaps/agents/codemap.md` following the LLM Code Maps specification
+- The code map provides clear documentation of the complex agent system's purpose as a LangGraph-based conversational AI architecture
+- Properly documented the conditional routing between specialized nodes, AppState interface, and LLM provider abstraction
+- Explained the system's integration with memory management, prompt services, and human-in-the-loop workflows for analysis and context building
+
+## Create Parent-Level Code Map for Source Directory - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned how to create parent-level code maps that summarize child components rather than individual files
+- Discovered that `main.ts` (211 lines) serves as the application entry point with CLI parsing, global configuration, and a template method pattern for memory management
+- Found that `utils.ts` provides cross-cutting utilities for debugging, logging, file operations, and LangGraph configuration
+- Confirmed that `config.ts` is minimal with just default file path constants
+- The src directory represents a well-architected system with clear separation between CLI orchestration, AI workflows, persistent memory, and configurable services
+
+### What was the problem you faced in this chat interaction?
+- The user requested creation of a parent-level code map for the `src` directory following the LLM Code Map - Parent Creation guideline
+- This required reading all existing child codemaps to extract their purpose statements and create concise summaries
+- Needed to understand the overall architecture and cross-cutting concerns that span multiple child components
+- Had to identify the role of files directly in src (main.ts, utils.ts, config.ts) and how they relate to the child components
+
+### How did you approach the problem?
+1. Read all existing child codemaps (commands, agents, memory, services) to extract their purpose statements
+2. Analyzed the key files directly in src directory (main.ts, utils.ts, config.ts) to understand their roles
+3. Created concise 1-2 sentence summaries for each child component based on their documented purposes
+4. Identified the overall architecture pattern: layered design with CLI commands, AI agents, memory services, and prompt services
+5. Documented cross-cutting concerns that span multiple components: memory management template pattern, global configuration, shared utilities, and error handling
+6. Followed the LLM Code Map - Parent Creation specification with proper sections and markdown formatting
+
+### Did your approach fix the problem?
+- Yes, successfully created a comprehensive parent-level code map at `docs/codemaps/codemap.md` following the specification
+- The code map provides a high-level view of Archie as an AI-powered architecture assistant with clear component summaries
+- Properly documented the layered architecture with separation of concerns and identified key cross-cutting patterns
+- Explained how the main entry point orchestrates the system through CLI parsing and memory management templates
+
+## Update Parent Code Map to Include Files Section - 04-06-2025
+
+### What did you discover about the project that you didn't know before?
+- Learned that parent-level code maps should include a Files section for files directly in the parent directory when they are important to understanding the module as a whole
+- Discovered the specific functions and exports in the core src files that are critical to the application's operation
+- Found that the LLM Code Map guidelines allow for Files sections in parent maps when files reside directly in the directory and are architecturally significant
+
+### What was the problem you faced in this chat interaction?
+- The user pointed out that the parent-level code map for src was missing documentation of the files directly in the src directory (main.ts, utils.ts, config.ts)
+- The original code map only included Child Components but overlooked the important files at the parent level
+- Needed to add a Files section following the proper format from the LLM Code Map guidelines
+
+### How did you approach the problem?
+1. Recognized that the parent-level code map was incomplete without documenting the core files in src
+2. Referenced both LLM Code Map - Leaf Creation and Parent Creation guidelines to understand the proper format for Files sections
+3. Analyzed the key files (main.ts, utils.ts, config.ts) to identify their purposes and important functions/exports
+4. Added a comprehensive Files section with proper markdown formatting and function descriptions
+5. Positioned the Files section before Child Components to follow logical documentation flow
+6. Used relative paths to link back to the actual source files for reference
+
+### Did your approach fix the problem?
+- Yes, successfully added a comprehensive Files section to the parent-level code map documenting all core src files
+- The Files section properly documents main.ts as the CLI entry point, utils.ts as shared utilities, and config.ts as configuration constants
+- Each file includes descriptions of key functions and exports that are important for understanding the overall architecture
+- The code map now provides complete documentation of both the direct files and child components in the src directory
