@@ -1,0 +1,173 @@
+---
+description: Rule for using LLM code maps for efficient context awareness
+globs: 
+alwaysApply: false
+---
+
+# Coding Agent Guideline: Using LLM Code Maps for Efficient and Context-Aware Development
+
+## Purpose
+
+As a coding agent, you must use **LLM Code Maps** as a primary source of architectural, structural, and contextual knowledge when interacting with a codebase. These maps provide curated, hierarchical documentation that bridges the gap between raw code and system-level understanding.
+
+This guideline defines how to consult and reason over `codemap.md` files efficiently and correctly, whether you're implementing a feature, fixing a bug, or navigating the codebase.
+
+---
+
+## Core Principles
+
+1. **Codemaps Are the Ground Truth** for structure, purpose, dependencies, and architectural intent.
+2. **Always Read the Codemap First** before reading source files. Start at the relevant directory’s `codemap.md`.
+3. **Follow the Hierarchy**:
+   - Start from the **nearest codemap** (leaf or local directory).
+   - If more context is needed, **walk up the directory tree** to find and read parent-level `codemap.md` files.
+4. **Do Not Guess**: Codemaps exist to avoid speculation. Do not assume file purposes or relationships if they're unclear — consult the maps.
+5. **Fallback Gracefully**: If a `codemap.md` is missing, emit a warning and fall back to reading the code directly — but **never invent structure or behavior**.
+6. **Be Efficient**: Codemaps allow you to focus only on the relevant files and components. Leverage this to avoid wasteful token consumption or irrelevant code scans.
+
+---
+
+## When to Use Code Maps
+
+| Task                          | Leaf Codemap | Parent Codemap(s) |
+|------------------------------|--------------|--------------------|
+| Implementing a feature       | ✅ Yes       | ✅ Yes              |
+| Fixing a bug                 | ✅ Yes       | ✅ Yes              |
+| Locating architectural logic | ❌ Only if needed | ✅ Yes        |
+| Understanding dependencies   | ✅ Yes       | ✅ Yes              |
+| Identifying extension points | ✅ Yes       | ✅ Yes              |
+
+---
+
+## How to Use Code Maps
+
+### Step 1: Locate and Read the Codemap
+
+- For a target directory `src/foo/bar/`, locate its codemap at:
+  ```text
+  docs/codemaps/foo/bar/codemap.md
+    ```
+
+* If the codemap is **missing**:
+
+  * Emit a warning: `⚠️ Warning: codemap.md not found at expected path. Falling back to code inspection.`
+  * Read the directory’s source files directly.
+  * Do **not** invent structure, dependencies, or purpose — only derive what you can observe.
+
+### Step 2: Parse the Key Sections
+
+#### For Leaf Codemaps
+
+| Section                  | Use This To...                                      |
+| ------------------------ | --------------------------------------------------- |
+| `## Purpose`             | Understand the module/component's high-level role.  |
+| `## Files`               | Identify which file(s) to inspect, edit, or extend. |
+| `## Architecture`        | Note local design patterns (e.g. CQRS, DI, etc.).   |
+| `## Dependencies`        | Know what internal or external modules are used.    |
+| `## External References` | Locate relevant specs, ADRs, and design docs.       |
+
+#### For Parent Codemaps
+
+| Section                     | Use This To...                                    |
+| --------------------------- | ------------------------------------------------- |
+| `## Purpose`                | Understand the broader role of this module group. |
+| `## Child Components`       | Follow links to immediate child codemaps.         |
+| `## Architecture`           | See how children collaborate and interact.        |
+| `## Cross-Cutting Concerns` | Learn about shared utilities, auth, logging, etc. |
+
+---
+
+## Example: Feature Implementation
+
+**Task**: Add a new JWT token rotation feature.
+
+1. Locate the likely component:
+
+   * Start at `src/auth/core/` → read `docs/codemaps/auth/core/codemap.md`
+
+2. From the codemap:
+
+   ```markdown
+   ## Files
+   - `jwt_handler.py`: Token generation, validation, and refresh logic using PyJWT
+   - `token_blacklist.py`: Revoked token management using Redis
+   ```
+
+   → These files are relevant. Start coding here.
+
+3. Check local architecture:
+
+   ```markdown
+   ## Architecture
+   Uses JWT for stateless authentication with 15-minute access tokens and 7-day refresh tokens.
+   ```
+
+   → Understand token lifecycle rules before changing logic.
+
+4. Walk up:
+
+   * Check `docs/codemaps/auth/codemap.md`:
+
+     ```markdown
+     ## Child Components
+     - [core](./core/codemap.md): Handles token creation and validation.
+     - [sessions](./sessions/codemap.md): Session lifecycle and Redis-backed refresh tracking.
+     ```
+   * This reveals that refresh token logic may be spread across both `core` and `sessions` — inspect both.
+
+---
+
+## Example: Walking Up the Hierarchy
+
+**Task**: Understand how a low-level module interacts with the broader service.
+
+1. Start at `src/payments/processing/` → codemap not found.
+   → Emit warning and read source files directly.
+
+2. Walk up to:
+
+   * `docs/codemaps/payments/codemap.md`
+
+     ```markdown
+     ## Purpose
+     Handles all payment operations including billing, subscriptions, and external gateway integration.
+
+     ## Child Components
+     - [processing](./processing/codemap.md): Orchestrates multi-step payment flows.
+     - [billing](./billing/codemap.md): Handles tax and invoice generation.
+     ```
+
+3. Insight:
+
+   * Even without a local `processing/codemap.md`, the parent map shows that this module integrates with `billing`.
+   * Now you know to check `billing/codemap.md` and external references before modifying payment flows.
+
+---
+
+## Efficiency Heuristics
+
+* ✅ If a codemap exists, trust its structure and file summaries first.
+* ✅ Follow all markdown links to specs or ADRs before modifying logic.
+* ✅ If codemaps are outdated or missing, fall back to raw code — but be conservative in assumptions.
+* ✅ Read only what you need — code maps help you narrow the scope.
+
+---
+
+## What Not to Do
+
+❌ **Do not** invent relationships, purposes, or architecture not stated in the codemap or code.
+❌ **Do not** scan entire directories when a codemap points to specific files.
+❌ **Do not** ignore higher-level codemaps — they often contain critical interaction details.
+❌ **Do not** fabricate dependencies, APIs, or flows from filenames alone.
+
+---
+
+## Summary Checklist
+
+✅ Start at the closest `codemap.md`
+✅ Parse `## Purpose`, `## Files`, `## Architecture`
+✅ Walk up to parent maps if needed
+✅ Follow links to child codemaps and referenced docs
+✅ Emit warnings on missing maps — then fall back to code
+✅ Never assume — only act on what is documented or verifiable
+
