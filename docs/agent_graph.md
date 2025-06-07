@@ -11,6 +11,7 @@ The following diagram represents the nodes and edges of the compiled agent graph
 graph TD;
     START([Start]);
     documentRetrievalNode([documentRetrievalNode]);
+    graphExtractionNode([graphExtractionNode]);
     analysisPrepare([analysisPrepare]);
     analysisInterrupt([analysisInterrupt]);
     contextBuildingAgent([contextBuildingAgent]);
@@ -21,9 +22,11 @@ graph TD;
     START -- currentFlow is NOT 'analyze'/'build_context' AND userInput starts with 'echo' --> echoAgent;
     START -- currentFlow is NOT 'analyze'/'build_context' AND NOT 'echo' --> END;
 
-    documentRetrievalNode -- currentFlow is 'analyze' --> analysisPrepare;
-    documentRetrievalNode -- currentFlow is 'build_context' --> contextBuildingAgent;
+    documentRetrievalNode -- currentFlow is 'analyze' or 'build_context' --> graphExtractionNode;
     documentRetrievalNode -- currentFlow is null/invalid --> END; 
+
+    graphExtractionNode -- currentFlow is 'analyze' --> analysisPrepare;
+    graphExtractionNode -- currentFlow is 'build_context' --> contextBuildingAgent;
 
     analysisPrepare -- has analysisOutput --> END;
     analysisPrepare -- no analysisOutput --> analysisInterrupt;
@@ -72,6 +75,16 @@ The graph consists of the following nodes:
 
 *   **`START`**: The special entry point node.
 *   **`documentRetrievalNode`**: Reads input files (`.txt`, `.md`) from the directory specified in `AppState.inputDirectoryPath` and populates `AppState.inputs` with their content (filename: content). Warns and skips unreadable files. **Critical for both analyze and build-context flows.**
+*   **`graphExtractionNode`**: **Knowledge graph extraction agent** that processes document content to extract entities and relationships using LangChain's `LLMGraphTransformer`. Operates on `AppState.inputs` and:
+    - Uses the configured LLM model from `AppState.modelName`
+    - Converts documents to LangChain `Document` objects with metadata
+    - Extracts knowledge graphs using `LLMGraphTransformer` with strict mode enabled
+    - Maps extracted nodes to Archie `Entity` objects (normalizing names, handling properties)
+    - Maps extracted relationships to Archie `Relationship` objects
+    - Updates the system memory via `MemoryService.addOrUpdateEntity()` and `addOrUpdateRelationship()`
+    - Serializes updated memory to `AppState.system_context`
+    - Handles errors gracefully with console warnings, never failing the flow
+    - **Critical for knowledge accumulation in both analyze and build-context flows.**
 *   **`echoAgent`**: Simple agent for echoing input. Used for testing the graph routing.
 *   **`analysisPrepare`**: **Complex conversational agent** for the 'analyze' flow. Handles:
     - LLM interactions with system prompt injection
@@ -99,15 +112,15 @@ The execution flow follows these connections:
     *   Else (if `currentFlow` is not `'analyze'` or `'build_context'`):
         *   If `AppState.userInput` (lowercase) starts with "echo" -> `echoAgent`.
         *   Otherwise -> `END`.
-2.  **`documentRetrievalNode` -> Conditional Routing**: After `documentRetrievalNode` retrieves input files (populating `AppState.inputs`), it transitions based on `AppState.currentFlow`:
+2.  **`documentRetrievalNode` -> `graphExtractionNode`**: After `documentRetrievalNode` retrieves input files (populating `AppState.inputs`), it transitions to `graphExtractionNode` for both `'analyze'` and `'build_context'` flows. If `currentFlow` is not set or invalid, it may route to `END`.
+3.  **`graphExtractionNode` -> Conditional Routing**: After `graphExtractionNode` extracts knowledge graphs and updates the system memory, it transitions based on `AppState.currentFlow`:
     *   If `currentFlow` is `'analyze'` -> `analysisPrepare`.
     *   If `currentFlow` is `'build_context'` -> `contextBuildingAgent`.
-    *   If `currentFlow` is not set or invalid, it may route to `END` (or handle as an error, depending on implementation).
-3.  **`analysisPrepare` -> `analysisInterrupt` (Conditional)**: If `analysisPrepare` completes *without* generating a final `analysisOutput`, it transitions to `analysisInterrupt`.
-4.  **`analysisPrepare` -> `END` (Conditional)**: If `analysisPrepare` completes *with* a final `analysisOutput` (e.g., solution approved or an error like missing inputs occurred), the graph terminates.
-5.  **`analysisInterrupt` -> `analysisPrepare`**: After resuming from an interrupt, execution always returns to `analysisPrepare` to process the user's input.
-6.  **`contextBuildingAgent` -> `END`**: After `contextBuildingAgent` generates the context overview content and filename, the graph terminates. (The actual file persistence happens in the `build-context` command handler after the graph concludes).
-7.  **`echoAgent` -> `END`**: After the `echoAgent` completes, the graph always terminates. 
+4.  **`analysisPrepare` -> `analysisInterrupt` (Conditional)**: If `analysisPrepare` completes *without* generating a final `analysisOutput`, it transitions to `analysisInterrupt`.
+5.  **`analysisPrepare` -> `END` (Conditional)**: If `analysisPrepare` completes *with* a final `analysisOutput` (e.g., solution approved or an error like missing inputs occurred), the graph terminates.
+6.  **`analysisInterrupt` -> `analysisPrepare`**: After resuming from an interrupt, execution always returns to `analysisPrepare` to process the user's input.
+7.  **`contextBuildingAgent` -> `END`**: After `contextBuildingAgent` generates the context overview content and filename, the graph terminates. (The actual file persistence happens in the `build-context` command handler after the graph concludes).
+8.  **`echoAgent` -> `END`**: After the `echoAgent` completes, the graph always terminates. 
 
 ## Memory & Knowledge Graph Integration
 

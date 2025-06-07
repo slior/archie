@@ -10,6 +10,7 @@ import {
     ANALYSIS_INTERRUPT, 
     DOCUMENT_RETRIEVAL, 
     CONTEXT_BUILDING_AGENT,
+    GRAPH_EXTRACTION,
     ANALYZE_FLOW,
     BUILD_CONTEXT_FLOW,
     Flow,
@@ -22,6 +23,7 @@ let analysisPrepareMock: sinon.SinonStub;
 let analysisInterruptMock: sinon.SinonStub;
 let documentRetrievalMock: sinon.SinonStub;
 let contextBuildingAgentMock: sinon.SinonStub;
+let graphExtractionMock: sinon.SinonStub;
 
 // Define a helper to create a minimal AppState
 const createInitialAppState = (overrides: Partial<AppState> = {}): AppState => ({
@@ -52,12 +54,14 @@ describe('Graph Echo Flow', () => {
         analysisInterruptMock = sinon.stub().resolves({});
         documentRetrievalMock = sinon.stub().resolves({});
         contextBuildingAgentMock = sinon.stub().resolves({});
+        graphExtractionMock = sinon.stub().resolves({});
 
         const mockNodes = {
             [ECHO_AGENT]: echoAgentMock as any,
             [ANALYSIS_PREPARE]: analysisPrepareMock as any,
             [ANALYSIS_INTERRUPT]: analysisInterruptMock as any,
             [DOCUMENT_RETRIEVAL]: documentRetrievalMock as any,
+            [GRAPH_EXTRACTION]: graphExtractionMock as any,
             [CONTEXT_BUILDING_AGENT]: contextBuildingAgentMock as any,
         };
         
@@ -115,12 +119,14 @@ describe('Graph Analyze Flow Routing', () => {
         analysisInterruptMock = sinon.stub().resolves({});
         documentRetrievalMock = sinon.stub().resolves({}); // Basic resolve for routing test
         contextBuildingAgentMock = sinon.stub().resolves({});
+        graphExtractionMock = sinon.stub().resolves({});
 
         const mockNodes = {
             [ECHO_AGENT]: echoAgentMock as any, 
             [ANALYSIS_PREPARE]: analysisPrepareMock as any,
             [ANALYSIS_INTERRUPT]: analysisInterruptMock as any,
             [DOCUMENT_RETRIEVAL]: documentRetrievalMock as any,
+            [GRAPH_EXTRACTION]: graphExtractionMock as any,
             [CONTEXT_BUILDING_AGENT]: contextBuildingAgentMock as any,
         };
         
@@ -133,7 +139,7 @@ describe('Graph Analyze Flow Routing', () => {
         sinon.restore();
     });
 
-    it('should route START -> DOCUMENT_RETRIEVAL -> ANALYSIS_PREPARE -> END when currentFlow is ANALYZE_FLOW', async () => {
+    it('should route START -> DOCUMENT_RETRIEVAL -> GRAPH_EXTRACTION -> ANALYSIS_PREPARE -> END when currentFlow is ANALYZE_FLOW', async () => {
         const initialState = createInitialAppState({
             userInput: "analyze this content",
             currentFlow: ANALYZE_FLOW,
@@ -142,10 +148,11 @@ describe('Graph Analyze Flow Routing', () => {
         const finalState = await app.invoke(initialState, { configurable: { thread_id: "test-analyze-flow-1" } });
 
         expect(documentRetrievalMock.calledOnce).to.be.true;
+        expect(graphExtractionMock.calledOnce).to.be.true;
         expect(analysisPrepareMock.calledOnce).to.be.true;
         
         // Check call order
-        sinon.assert.callOrder(documentRetrievalMock, analysisPrepareMock);
+        sinon.assert.callOrder(documentRetrievalMock, graphExtractionMock, analysisPrepareMock);
 
         // Ensure other flows or echo were not triggered
         expect(echoAgentMock.called).to.be.false;
@@ -167,12 +174,14 @@ describe('Graph Build Context Flow Routing', () => {
         analysisInterruptMock = sinon.stub().resolves({});
         documentRetrievalMock = sinon.stub().resolves({}); 
         contextBuildingAgentMock = sinon.stub().resolves({ contextBuilderOutputContent: "mocked context" }); // Ensure it can END
+        graphExtractionMock = sinon.stub().resolves({});
 
         const mockNodes = {
             [ECHO_AGENT]: echoAgentMock as any, 
             [ANALYSIS_PREPARE]: analysisPrepareMock as any,
             [ANALYSIS_INTERRUPT]: analysisInterruptMock as any,
             [DOCUMENT_RETRIEVAL]: documentRetrievalMock as any,
+            [GRAPH_EXTRACTION]: graphExtractionMock as any,
             [CONTEXT_BUILDING_AGENT]: contextBuildingAgentMock as any,
         };
         
@@ -185,7 +194,7 @@ describe('Graph Build Context Flow Routing', () => {
         sinon.restore();
     });
 
-    it('should route START -> DOCUMENT_RETRIEVAL -> CONTEXT_BUILDING_AGENT -> END when currentFlow is BUILD_CONTEXT_FLOW', async () => {
+    it('should route START -> DOCUMENT_RETRIEVAL -> GRAPH_EXTRACTION -> CONTEXT_BUILDING_AGENT -> END when currentFlow is BUILD_CONTEXT_FLOW', async () => {
         const initialState = createInitialAppState({
             userInput: "build context for this system",
             currentFlow: BUILD_CONTEXT_FLOW,
@@ -194,9 +203,10 @@ describe('Graph Build Context Flow Routing', () => {
         const finalState = await app.invoke(initialState, { configurable: { thread_id: "test-build-context-flow-1" } });
 
         expect(documentRetrievalMock.calledOnce).to.be.true;
+        expect(graphExtractionMock.calledOnce).to.be.true;
         expect(contextBuildingAgentMock.calledOnce).to.be.true;
         
-        sinon.assert.callOrder(documentRetrievalMock, contextBuildingAgentMock);
+        sinon.assert.callOrder(documentRetrievalMock, graphExtractionMock, contextBuildingAgentMock);
 
         expect(echoAgentMock.called).to.be.false;
         expect(analysisPrepareMock.called).to.be.false;
@@ -217,12 +227,14 @@ describe('Graph Analyze Flow Interrupt Logic', () => {
         analysisInterruptMock = sinon.stub().resolves({ userInput: "user response to interrupt" });
         documentRetrievalMock = sinon.stub().resolves({}); // Called once at the beginning
         contextBuildingAgentMock = sinon.stub().resolves({}); // Not relevant
+        graphExtractionMock = sinon.stub().resolves({});
 
         const mockNodes = {
             [ECHO_AGENT]: echoAgentMock as any, 
             [ANALYSIS_PREPARE]: analysisPrepareMock as any,
             [ANALYSIS_INTERRUPT]: analysisInterruptMock as any,
             [DOCUMENT_RETRIEVAL]: documentRetrievalMock as any,
+            [GRAPH_EXTRACTION]: graphExtractionMock as any,
             [CONTEXT_BUILDING_AGENT]: contextBuildingAgentMock as any,
         };
         
@@ -235,8 +247,8 @@ describe('Graph Analyze Flow Interrupt Logic', () => {
         sinon.restore();
     });
 
-    it('should route DR -> AP -> AI -> AP -> END for analyze flow interrupt', async () => {
-        // AP = Analysis Prepare, AI = Analysis Interrupt, DR = Document Retrieval
+    it('should route DR -> GE -> AP -> AI -> AP -> END for analyze flow interrupt', async () => {
+        // DR = Document Retrieval, GE = Graph Extraction, AP = Analysis Prepare, AI = Analysis Interrupt
         analysisPrepareMock.onFirstCall().resolves({}); // No analysisOutput, should trigger interrupt
         analysisPrepareMock.onSecondCall().resolves({ analysisOutput: "final analysis from second call" }); // Has output, should END
 
@@ -248,11 +260,13 @@ describe('Graph Analyze Flow Interrupt Logic', () => {
         const finalState = await app.invoke(initialState, { configurable: { thread_id: "test-interrupt-flow-1" } });
 
         expect(documentRetrievalMock.calledOnce).to.be.true;
+        expect(graphExtractionMock.calledOnce).to.be.true;
         expect(analysisPrepareMock.calledTwice).to.be.true;
         expect(analysisInterruptMock.calledOnce).to.be.true;
 
         // Verify call order using specific spy calls
-        expect(documentRetrievalMock.firstCall.calledBefore(analysisPrepareMock.firstCall), 'DR.call1 before AP.call1').to.be.true;
+        expect(documentRetrievalMock.firstCall.calledBefore(graphExtractionMock.firstCall), 'DR.call1 before GE.call1').to.be.true;
+        expect(graphExtractionMock.firstCall.calledBefore(analysisPrepareMock.firstCall), 'GE.call1 before AP.call1').to.be.true;
         expect(analysisPrepareMock.firstCall.calledBefore(analysisInterruptMock.firstCall), 'AP.call1 before AI.call1').to.be.true;
         expect(analysisInterruptMock.firstCall.calledBefore(analysisPrepareMock.secondCall), 'AI.call1 before AP.call2').to.be.true;
 

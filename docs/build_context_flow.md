@@ -8,7 +8,8 @@ The `build-context` command allows users to generate a contextual overview for a
 
 The agent graph then executes: 
 1. `documentRetrievalNode`: Reads files from the specified directory and stores their content in `AppState.inputs`.
-2. `contextBuildingAgentNode`: Uses the content from `AppState.inputs` and `AppState.systemName` to generate a context summary via an LLM call. It utilizes an injected `PromptService` (passed via `config.configurable` from `runBuildContext` in `buildContext.ts`) to get the appropriate formatted prompt string. The generated summary and the output filename (`<system_name>_context.md`) are stored in `AppState.contextBuilderOutputContent` and `AppState.contextBuilderOutputFileName` respectively.
+2. `graphExtractionNode`: Processes the document content to extract entities and relationships using LangChain's `LLMGraphTransformer`, updating the system's knowledge graph in `AppState.system_context`.
+3. `contextBuildingAgentNode`: Uses the content from `AppState.inputs`, the enriched knowledge graph from `AppState.system_context`, and `AppState.systemName` to generate a context summary via an LLM call. It utilizes an injected `PromptService` (passed via `config.configurable` from `runBuildContext` in `buildContext.ts`) to get the appropriate formatted prompt string. The generated summary and the output filename (`<system_name>_context.md`) are stored in `AppState.contextBuilderOutputContent` and `AppState.contextBuilderOutputFileName` respectively.
 
 Unlike the `analyze` command, `build-context` is a single-pass operation without a Human-in-the-Loop (HITL) conversational cycle. After the graph completes, the `runBuildContext` function in `buildContext.ts` retrieves the generated content and filename from the final `AppState` and persists it to a markdown file in the input directory.
 
@@ -23,6 +24,7 @@ sequenceDiagram
     participant PromptService
     participant AgentGraph
     participant DocumentRetrievalNode as DocRetrievalNode
+    participant GraphExtractionNode as GraphExtractNode
     participant ContextBuildingAgentNode as CtxBuildNode
     participant Checkpointer
 
@@ -40,7 +42,12 @@ sequenceDiagram
     DocRetrievalNode->>DocRetrievalNode: Read files from disk
     DocRetrievalNode->>AgentGraph: Return Partial<AppState> { inputs: {...} }
     AgentGraph->>Checkpointer: Save State
-    AgentGraph->>CtxBuildNode: Route -> ContextBuildingAgentNode (state has inputs, systemName, currentFlow)
+    AgentGraph->>GraphExtractNode: Route -> GraphExtractionNode (state has inputs)
+    GraphExtractNode->>GraphExtractNode: Extract entities/relationships using LLMGraphTransformer
+    GraphExtractNode->>GraphExtractNode: Update MemoryService with extracted knowledge
+    GraphExtractNode->>AgentGraph: Return Partial<AppState> { system_context: {...} }
+    AgentGraph->>Checkpointer: Save State
+    AgentGraph->>CtxBuildNode: Route -> ContextBuildingAgentNode (state has inputs, systemName, system_context, currentFlow)
     
     CtxBuildNode->>CtxBuildNode: Run ContextBuildingAgentNode(state, config)
     CtxBuildNode->>PromptService: Get formatted prompt (using state.inputs, state.systemName)
@@ -83,11 +90,21 @@ sequenceDiagram
 5.  **Document Retrieval (`src/agents/DocumentRetrievalNode.ts`):**
     *   `documentRetrievalNode` executes, reads `state.inputDirectoryPath`, and populates `state.inputs` with file contents.
 
-6.  **Conditional Routing after Document Retrieval (`src/agents/graph.ts`):**
+6.  **Knowledge Graph Extraction (`src/agents/GraphExtractionNode.ts`):**
+    *   `graphExtractionNode` executes. It receives the `state` (which now includes `state.inputs`) and the `config`.
+    *   It retrieves the `MemoryService` from `config.configurable.memoryService`.
+    *   It converts `state.inputs` content to LangChain `Document` objects with metadata.
+    *   It uses `LLMGraphTransformer` with the configured LLM model (`state.modelName`) to extract knowledge graphs.
+    *   It maps extracted nodes to Archie `Entity` objects and relationships to Archie `Relationship` objects.
+    *   It updates the system memory using `memoryService.addOrUpdateEntity()` and `addOrUpdateRelationship()`.
+    *   It serializes the updated memory to `state.system_context` for downstream agents.
+    *   Handles errors gracefully with console warnings, never failing the flow.
+
+7.  **Conditional Routing after Graph Extraction (`src/agents/graph.ts`):**
     *   The graph checks `state.currentFlow`.
     *   Since `state.currentFlow` is `'build_context'`, it routes to `contextBuildingAgentNode`.
 
-7.  **Context Building (`src/agents/ContextBuildingAgentNode.ts`):**
+8.  **Context Building (`src/agents/ContextBuildingAgentNode.ts`):**
     *   `contextBuildingAgentNode` executes. It receives the `state` (with `inputs`, `systemName`, `currentFlow`) and `config`.
     *   It retrieves `promptService` from `config.configurable.promptService`.
     *   Validates `state.inputs` and `state.systemName`.
@@ -96,15 +113,15 @@ sequenceDiagram
     *   Calls `callTheLLM` with the prompt to get the context overview.
     *   Returns a `Partial<AppState>` with `contextBuilderOutputContent` set to the LLM response and `contextBuilderOutputFileName` set to `"<systemName>_context.md"`.
 
-8.  **Graph Termination:**
+9.  **Graph Termination:**
     *   The graph flows from `contextBuildingAgentNode` to `END`.
     *   The `agentApp.invoke()` call in `runBuildContext` returns the final `AppState`.
 
-9.  **Output Persistence (`runBuildContext` in `src/commands/buildContext.ts`):**
+10. **Output Persistence (`runBuildContext` in `src/commands/buildContext.ts`):**
     *   `runBuildContext` retrieves `contextBuilderOutputContent` and `contextBuilderOutputFileName` from the returned final `AppState`.
     *   It calls the shared `persistOutput` utility: `persistOutput(content, inputsDir, fileName)`.
     *   Success or error is logged to the console.
 
-10. **Completion (`src/main.ts`):**
+11. **Completion (`src/main.ts`):**
     *   `runBuildContext` returns.
     *   `main.ts` saves memory state (if applicable) and exits. 

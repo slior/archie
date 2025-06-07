@@ -1,6 +1,6 @@
 # Archie - AI Architecture Assistant
 
-Archie is a system of AI agents designed to assist with software architecture analysis and design tasks. This initial version provides a basic command-line interface (CLI) shell and a simple echo agent functionality.
+Archie is a system of AI agents designed to assist with software architecture analysis and design tasks. It features automatic knowledge graph extraction from documents, persistent memory across sessions, and intelligent conversational analysis capabilities.
 
 ## Prerequisites
 
@@ -14,6 +14,19 @@ Archie is a system of AI agents designed to assist with software architecture an
     ```bash
     npm install
     ```
+
+### Key Dependencies
+
+Archie uses several key packages for its functionality:
+
+*   **LangChain Ecosystem**: For LLM integration and knowledge graph extraction
+    *   `@langchain/core`: Core LangChain functionality
+    *   `@langchain/openai`: OpenAI LLM integration
+    *   `@langchain/community`: Community tools including `LLMGraphTransformer`
+    *   `@langchain/langgraph`: State management and agent workflows
+*   **OpenAI**: Direct API integration for LLM calls
+*   **Commander**: Command-line interface framework
+*   **Inquirer**: Interactive command-line prompts
 
 ## Configuration
 
@@ -134,9 +147,27 @@ npm run start -- build-context --inputs ./specs/new_module --system-name NewModu
 *   `--memory-file <path>`: Specify the path to the JSON file used for persistent memory (defaults to `./memory.json`).
 *   `--model <name>`: Specify the underlying LLM to use (e.g., `gpt-4`, `gpt-3.5-turbo`).
 
+## Knowledge Graph Extraction
+
+Archie automatically extracts entities and relationships from your documents using advanced LLM-powered knowledge graph extraction. This feature:
+
+*   **Automatic Processing**: Every `analyze` and `build-context` command automatically processes input documents to extract structured knowledge
+*   **Entity Recognition**: Identifies system components like services, databases, APIs, modules, and concepts
+*   **Relationship Mapping**: Discovers connections between entities (dependencies, communications, data flows, etc.)
+*   **Persistent Memory**: Extracted knowledge is stored in the memory file and accumulates across sessions
+*   **Context Enhancement**: Downstream analysis agents have access to the enriched knowledge graph for better insights
+
+The extraction happens transparently during document processing and requires no additional configuration. The knowledge graph is stored in the memory file alongside conversation history.
+
 ## Memory File (`memory.json`)
 
-The application can load and save state (like conversation history or derived knowledge) to a JSON file. The exact structure depends on the agents and checkpointers used. By default, it uses `./memory.json`.
+The application can load and save state (like conversation history or derived knowledge) to a JSON file. This includes:
+
+*   **Conversation History**: Previous analysis sessions and user interactions
+*   **Knowledge Graph**: Extracted entities and relationships from processed documents
+*   **System Context**: Accumulated understanding of your architecture and systems
+
+The exact structure depends on the agents and checkpointers used. By default, it uses `./memory.json`.
 
 ## Developer Documentation
 

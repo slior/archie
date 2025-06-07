@@ -7,6 +7,7 @@ Archie is designed to streamline software architecture workflows by providing in
 ## Existing functionality and configuration
 
 - [CLI Interface (no_shell.md)](./docs/features/no_shell.md): Archie operates via direct command-line execution for commands like `analyze` and `ask`.
+- [Knowledge Graph Extraction (graph_extraction_agent.md)](./docs/features/graph_extraction_agent.md): Automatic extraction of entities and relationships from documents using LLMGraphTransformer.
 - [Configurable Prompts (config_prompts.md)](./docs/features/config_prompts.md): Users can customize prompts used by the AI agents.
 - [Configurable AI Model (configurable_model.md)](./docs/features/configurable_model.md): The LLM used by Archie can be configured.
 - [Initial Project Specification (initial_spec.md)](./docs/initial_spec.md): Provides an overview of the project's goals and scope.

@@ -17,6 +17,9 @@ Implements the LangGraph-based agent system with individual nodes for analysis, 
   - [`contextBuildingAgentNode()`](./ContextBuildingAgentNode.ts): Main node function that processes inputs and generates contextual documentation.
 - [`DocumentRetrievalNode.ts`](./DocumentRetrievalNode.ts): Utility node for reading and loading files from input directories.
   - [`documentRetrievalNode()`](./DocumentRetrievalNode.ts): Reads .txt and .md files from specified directories into the AppState.
+- [`GraphExtractionNode.ts`](./GraphExtractionNode.ts): Knowledge graph extraction agent that processes document content to extract entities and relationships using LangChain's LLMGraphTransformer.
+  - [`graphExtractionNode()`](./GraphExtractionNode.ts): Main node function that converts documents to knowledge graphs and updates system memory.
+  - [`normalizeEntityName()`](./GraphExtractionNode.ts): Helper function that normalizes entity names for consistent storage.
 - [`AnalysisInterruptNode.ts`](./AnalysisInterruptNode.ts): Handles interruption and resumption during multi-turn analysis conversations.
   - [`analysisInterruptNode()`](./AnalysisInterruptNode.ts): Manages analysis interrupts and prepares for user input collection.
 - [`EchoAgentNode.ts`](./EchoAgentNode.ts): Simple test node that echoes user input for basic graph validation.
@@ -40,7 +43,7 @@ Implements the LangGraph-based agent system with individual nodes for analysis, 
   - [`DEFAULT_MODEL_NAME`](./llmConstants.ts): Default LLM model identifier.
 
 ## Architecture
-The system implements a LangGraph-based conversational AI architecture with conditional routing between specialized nodes. Each node handles specific responsibilities (document retrieval, analysis, context building) while sharing state through the AppState interface. The architecture supports multiple flows (analyze, build_context) with configurable LLM providers and comprehensive memory management through knowledge graph integration.
+The system implements a LangGraph-based conversational AI architecture with conditional routing between specialized nodes. Each node handles specific responsibilities (document retrieval, knowledge graph extraction, analysis, context building) while sharing state through the AppState interface. The architecture supports multiple flows (analyze, build_context) with configurable LLM providers and comprehensive memory management through knowledge graph integration.
 
 ## Interactions
 - Integrates with command handlers through AppState initialization and final state return
@@ -49,7 +52,8 @@ The system implements a LangGraph-based conversational AI architecture with cond
 - Interfaces with external LLM providers (OpenAI) through the ILLMClient abstraction
 - Coordinates with file system operations for document retrieval and context building
 - Supports interruption/resumption patterns for human-in-the-loop workflows
+- Processes documents through LLMGraphTransformer for automatic knowledge graph extraction
 
 ## Dependencies
-- **External**: `@langchain/langgraph` for StateGraph implementation, `@langchain/core/runnables` for LangGraph types, `dotenv` for environment configuration, `fs/promises` and `path` for file operations
+- **External**: `@langchain/langgraph` for StateGraph implementation, `@langchain/core/runnables` for LangGraph types, `@langchain/community` for LLMGraphTransformer, `@langchain/openai` for LLM integration, `dotenv` for environment configuration, `fs/promises` and `path` for file operations
 - **Internal**: `../utils` for debugging and configuration utilities, `../memory/MemoryService` and `../memory/memory_types` for knowledge graph management 

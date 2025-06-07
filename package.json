@@ -30,8 +30,10 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@langchain/community": "^0.3.45",
     "@langchain/core": "^0.3.56",
     "@langchain/langgraph": "^0.2.67",
+    "@langchain/openai": "^0.5.12",
     "commander": "^13.1.0",
     "dotenv": "^16.5.0",
     "inquirer": "^12.6.0",

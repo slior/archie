@@ -4,9 +4,9 @@ This document details the execution flow of the `analyze` command, focusing on h
 
 ## Overview
 
-The `analyze` command allows users to initiate an analysis task by providing an initial query (`--query`) and an input directory path (`--inputs`). Optionally, a `--prompts-config <path>` can be provided to customize agent prompts. The command execution is wrapped in a `withMemoryManagement` function that handles loading and saving memory state. The `analyze.ts` command module sets the `inputDirectoryPath` in the initial `AppState`. The agent graph, specifically the `documentRetrievalNode`, then reads relevant files (`.txt`, `.md`) from this path and stores their content in `AppState.inputs`. Subsequently, the graph enters a conversational loop where an AI agent (starting with `analysisPrepareNode`, which now reads from `AppState.inputs`) interacts with the user via the console, asking clarifying questions until the user approves a proposed solution or indicates they are done. This flow runs directly from the command line after being invoked via `src/main.ts`.
+The `analyze` command allows users to initiate an analysis task by providing an initial query (`--query`) and an input directory path (`--inputs`). Optionally, a `--prompts-config <path>` can be provided to customize agent prompts. The command execution is wrapped in a `withMemoryManagement` function that handles loading and saving memory state. The `analyze.ts` command module sets the `inputDirectoryPath` in the initial `AppState`. The agent graph, specifically the `documentRetrievalNode`, then reads relevant files (`.txt`, `.md`) from this path and stores their content in `AppState.inputs`. Next, the `graphExtractionNode` processes these documents to extract entities and relationships using LangChain's `LLMGraphTransformer`, updating the system's knowledge graph. Subsequently, the graph enters a conversational loop where an AI agent (starting with `analysisPrepareNode`, which now reads from `AppState.inputs` and has access to the enriched knowledge graph) interacts with the user via the console, asking clarifying questions until the user approves a proposed solution or indicates they are done. This flow runs directly from the command line after being invoked via `src/main.ts`.
 
-This flow leverages LangGraph's state management, checkpointers, and interrupt mechanism, combined with a node structure including `documentRetrievalNode`, `AnalysisPrepareNode`, and `AnalysisInterruptNode`. The actual LLM interaction happens within `AnalysisPrepareNode`. This node uses an injected `PromptService` (passed via `config.configurable` using the `createConfigWithPromptService` utility from `runGraph` in `analyze.ts`) to get formatted prompt strings and uses `AppState.inputs` for file-related context. The `PromptService` handles loading default prompts or custom prompts specified in the user-provided configuration file. The `callLLM` function within `AnalysisPrepareNode` then uses this formatted prompt when calling `callTheLLM` from `src/agents/LLMUtils.ts`.
+This flow leverages LangGraph's state management, checkpointers, and interrupt mechanism, combined with a node structure including `documentRetrievalNode`, `graphExtractionNode`, `AnalysisPrepareNode`, and `AnalysisInterruptNode`. The actual LLM interactions happen within both `graphExtractionNode` (for knowledge extraction) and `AnalysisPrepareNode` (for conversational analysis). The `AnalysisPrepareNode` uses an injected `PromptService` (passed via `config.configurable` using the `createConfigWithPromptService` utility from `runGraph` in `analyze.ts`) to get formatted prompt strings and uses `AppState.inputs` for file-related context. The `PromptService` handles loading default prompts or custom prompts specified in the user-provided configuration file. The `callLLM` function within `AnalysisPrepareNode` then uses this formatted prompt when calling `callTheLLM` from `src/agents/LLMUtils.ts`.
 
 ## Visual Flow Diagram
 
@@ -20,6 +20,7 @@ sequenceDiagram
     participant PromptService
     participant AgentGraph
     participant DocumentRetrievalNode as DocRetrievalNode
+    participant GraphExtractionNode as GraphExtractNode
     participant AnalysisPrepareNode as PrepNode
     participant AnalysisInterruptNode as InterruptNode
     participant Checkpointer
@@ -43,7 +44,12 @@ sequenceDiagram
     DocRetrievalNode->>DocRetrievalNode: Read .txt/.md files from directory
     DocRetrievalNode->>AgentGraph: Return Partial<AppState> { inputs: {...} }
     AgentGraph->>Checkpointer: Save State
-    AgentGraph->>PrepNode: Route -> AnalysisPrepareNode (state has inputs)
+    AgentGraph->>GraphExtractNode: Route -> GraphExtractionNode (state has inputs)
+    GraphExtractNode->>GraphExtractNode: Extract entities/relationships using LLMGraphTransformer
+    GraphExtractNode->>GraphExtractNode: Update MemoryService with extracted knowledge
+    GraphExtractNode->>AgentGraph: Return Partial<AppState> { system_context: {...} }
+    AgentGraph->>Checkpointer: Save State
+    AgentGraph->>PrepNode: Route -> AnalysisPrepareNode (state has inputs + system_context)
     
     PrepNode->>PrepNode: Run AnalysisPrepareNode(state{inputs, ...}, config)
     PrepNode->>PromptService: Get formatted prompt (using state.inputs for context)
@@ -140,9 +146,20 @@ sequenceDiagram
     *   It reads `state.inputDirectoryPath`.
     *   It reads `.txt` and `.md` files from the directory, handling errors by warning and skipping files.
     *   It populates `state.inputs` with a map of { filename: content } using the basename as the key.
+    *   The graph then transitions to `graphExtractionNode` for both analyze and build-context flows.
+
+9.  **Knowledge Graph Extraction (`src/agents/GraphExtractionNode.ts`):**
+    *   `graphExtractionNode` executes. It receives the `state` (which now includes `state.inputs`) and the `config`.
+    *   It retrieves the `MemoryService` from `config.configurable.memoryService`.
+    *   It converts `state.inputs` content to LangChain `Document` objects with metadata.
+    *   It uses `LLMGraphTransformer` with the configured LLM model (`state.modelName`) to extract knowledge graphs.
+    *   It maps extracted nodes to Archie `Entity` objects and relationships to Archie `Relationship` objects.
+    *   It updates the system memory using `memoryService.addOrUpdateEntity()` and `addOrUpdateRelationship()`.
+    *   It serializes the updated memory to `state.system_context` for downstream agents.
+    *   Handles errors gracefully with console warnings, never failing the flow.
     *   The graph then transitions to `ANALYSIS_PREPARE` based on the `currentFlow`.
 
-9.  **Analysis Preparation (`src/agents/AnalysisPrepareNode.ts`):**
+10. **Analysis Preparation (`src/agents/AnalysisPrepareNode.ts`):**
     *   `analysisPrepareNode` executes. It receives the `state` (which now includes `state.inputs`) and the `config` (of type `AppRunnableConfig`).
     *   It first checks if `state.inputs` is populated. If not (and inputs were expected), it sets an error in `analysisOutput` and transitions to `END`.
     *   It retrieves `promptService` from `config.configurable.promptService`.
@@ -150,18 +167,18 @@ sequenceDiagram
     *   **LLM Interaction:** If not done, it calls `callLLMForNextStep()` which constructs the appropriate prompt using `promptService.getFormattedPrompt()` and calls the LLM via `callTheLLM()` from `LLMUtils.ts`.
     *   **Next Step Decision:** Based on whether `analysisOutput` is populated, it either ends the flow or proceeds to the interrupt node.
 
-10. **Analysis Interrupt (`src/agents/AnalysisInterruptNode.ts`):**
+11. **Analysis Interrupt (`src/agents/AnalysisInterruptNode.ts`):**
     *   `analysisInterruptNode` executes when the agent needs user input.
     *   It calls `interrupt({ query: currentAnalysisQuery })` to pause execution and return control to the `runGraph` function.
     *   The interrupt contains the agent's question for the user.
 
-11. **User Interaction Loop (`runGraph` and `analysisIteration`):**
+12. **User Interaction Loop (`runGraph` and `analysisIteration`):**
     *   When an interrupt occurs, `runGraph` detects it and returns `{ interrupted: true, agentQuery }`.
     *   `analysisIteration` displays the agent's query to the user and prompts for input using `inquirer`.
     *   The user's response is packaged into a `Command({ resume: userResponse })` and becomes the next input.
     *   The loop continues until the agent generates a final `analysisOutput` or the user indicates they are done.
 
-12. **Final Output and Cleanup:**
+13. **Final Output and Cleanup:**
     *   Once the analysis is complete, `getFinalOutput()` extracts the final analysis from the graph state.
     *   `displayFinalOutputToUser()` shows the result to the user.
     *   `persistFinalOutput()` saves the analysis to a file in the input directory.

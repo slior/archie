@@ -4,6 +4,7 @@ import { echoAgentNode } from "./EchoAgentNode";
 import { analysisPrepareNode } from "./AnalysisPrepareNode";
 import { analysisInterruptNode } from "./AnalysisInterruptNode";
 import { documentRetrievalNode } from "./DocumentRetrievalNode";
+import { graphExtractionNode } from "./GraphExtractionNode";
 import { contextBuildingAgentNode } from './ContextBuildingAgentNode';
 import { AppRunnableConfig, dbg } from "../utils";
 import { MemoryState } from "../memory/memory_types";
@@ -13,6 +14,7 @@ export const ECHO_AGENT = "echoAgent";
 export const ANALYSIS_PREPARE = "analysisPrepare";
 export const ANALYSIS_INTERRUPT = "analysisInterrupt";
 export const DOCUMENT_RETRIEVAL = "documentRetrievalNode";
+export const GRAPH_EXTRACTION = "graphExtractionNode";
 export const CONTEXT_BUILDING_AGENT = "contextBuildingAgent";
 
 /**
@@ -130,6 +132,7 @@ export function createWorkflow(nodes: Record<string, StateGraphNode>)
         .addNode(ANALYSIS_PREPARE, nodes[ANALYSIS_PREPARE])
         .addNode(ANALYSIS_INTERRUPT, nodes[ANALYSIS_INTERRUPT])
         .addNode(DOCUMENT_RETRIEVAL, nodes[DOCUMENT_RETRIEVAL])
+        .addNode(GRAPH_EXTRACTION, nodes[GRAPH_EXTRACTION])
         .addNode(CONTEXT_BUILDING_AGENT, nodes[CONTEXT_BUILDING_AGENT])
         
         // Define the entry point and initial routing logic from START
@@ -167,17 +170,36 @@ export function createWorkflow(nodes: Record<string, StateGraphNode>)
         // Define routing after the DOCUMENT_RETRIEVAL node completes
         .addConditionalEdges(DOCUMENT_RETRIEVAL, 
             (state: AppState) => {
+                // Always route to graph extraction after document retrieval for both flows
+                if (state.currentFlow === ANALYZE_FLOW || state.currentFlow === BUILD_CONTEXT_FLOW) {
+                    dbg('Routing after Document Retrieval to Graph Extraction');
+                    return GRAPH_EXTRACTION;
+                } else {
+                    // Fallback if the flow is unknown or not set
+                    console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
+                    dbg('Routing after Document Retrieval to END due to unknown flow.');
+                    return END; 
+                }
+            },
+            {
+                [GRAPH_EXTRACTION]: GRAPH_EXTRACTION,
+                [END]: END
+            }
+        )
+        // Define routing after the GRAPH_EXTRACTION node completes
+        .addConditionalEdges(GRAPH_EXTRACTION, 
+            (state: AppState) => {
                 switch (state.currentFlow) {
                     case ANALYZE_FLOW:
-                        dbg('Routing after Document Retrieval to Analysis Prepare');
+                        dbg('Routing after Graph Extraction to Analysis Prepare');
                         return ANALYSIS_PREPARE; // Proceed to analysis preparation
                     case BUILD_CONTEXT_FLOW:
-                        dbg('Routing after Document Retrieval to Context Building Agent');
+                        dbg('Routing after Graph Extraction to Context Building Agent');
                         return CONTEXT_BUILDING_AGENT; // Proceed to context building
                     default:
                         // Fallback if the flow is unknown or not set
-                        console.warn("Unknown flow in routeAfterDocumentRetrieval:", state.currentFlow);
-                        dbg('Routing after Document Retrieval to END due to unknown flow.');
+                        console.warn("Unknown flow in routeAfterGraphExtraction:", state.currentFlow);
+                        dbg('Routing after Graph Extraction to END due to unknown flow.');
                         return END; 
                 }
             },
@@ -218,6 +240,7 @@ const nodes = {
     [ANALYSIS_PREPARE]: analysisPrepareNode as unknown as StateGraphNode,
     [ANALYSIS_INTERRUPT]: analysisInterruptNode as unknown as StateGraphNode,
     [DOCUMENT_RETRIEVAL]: documentRetrievalNode as unknown as StateGraphNode,
+    [GRAPH_EXTRACTION]: graphExtractionNode as unknown as StateGraphNode,
     [CONTEXT_BUILDING_AGENT]: contextBuildingAgentNode as unknown as StateGraphNode,
 }
 const workflow = createWorkflow(nodes);
