@@ -4,17 +4,17 @@
 Implements Archie, an AI-powered architecture assistant providing CLI-based analysis, context building, and consultation capabilities through LangGraph conversational flows with persistent knowledge graph memory.
 
 ## Files
-- [`main.ts`](../src/main.ts): Application entry point providing CLI interface with global configuration and memory management orchestration.
-  - [`withMemoryManagement()`](../src/main.ts): Template method that ensures memory loading before command execution and saving after completion.
-  - [`main()`](../src/main.ts): Sets up Commander.js CLI with global options and command definitions for analyze, build-context, and ask operations.
-- [`utils.ts`](../src/utils.ts): Shared utilities for debugging, configuration, and cross-cutting concerns used throughout the application.
-  - [`dbg()`](../src/utils.ts): Debug logging function for development and troubleshooting.
-  - [`say()`](../src/utils.ts): User-facing console output function for messages.
-  - [`newGraphConfig()`](../src/utils.ts): Creates new LangGraph configuration objects with unique thread IDs.
-  - [`persistOutput()`](../src/utils.ts): Generic file persistence utility with dependency injection for testability.
-  - [`createConfigWithPromptService()`](../src/utils.ts): Embeds PromptService instances into LangGraph configuration objects.
-- [`config.ts`](../src/config.ts): Application configuration constants and default values.
-  - [`DEFAULT_CONTEXT_FILE_PATH`](../src/config.ts): Default file path for JSON-based memory persistence.
+- [`main.ts`](../../src/main.ts): Application entry point providing CLI interface with global configuration and memory management orchestration.
+  - [`withMemoryManagement()`](../../src/main.ts): Template method that ensures memory loading before command execution and saving after completion.
+  - [`main()`](../../src/main.ts): Sets up Commander.js CLI with global options and command definitions for analyze, build-context, and ask operations.
+- [`utils.ts`](../../src/utils.ts): Shared utilities for debugging, configuration, and cross-cutting concerns used throughout the application.
+  - [`dbg()`](../../src/utils.ts): Debug logging function for development and troubleshooting.
+  - [`say()`](../../src/utils.ts): User-facing console output function for messages.
+  - [`newGraphConfig()`](../../src/utils.ts): Creates new LangGraph configuration objects with unique thread IDs.
+  - [`persistOutput()`](../../src/utils.ts): Generic file persistence utility with dependency injection for testability.
+  - [`createConfigWithPromptService()`](../../src/utils.ts): Embeds PromptService instances into LangGraph configuration objects.
+- [`config.ts`](../../src/config.ts): Application configuration constants and default values.
+  - [`DEFAULT_CONTEXT_FILE_PATH`](../../src/config.ts): Default file path for JSON-based memory persistence.
 
 ## Child Components
 - [commands](./commands/codemap.md): Contains command implementations for Archie's CLI interface, providing analysis, context building, and AI assistant functionality through direct command execution.
