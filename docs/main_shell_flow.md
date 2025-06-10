@@ -23,7 +23,7 @@ sequenceDiagram
     Main->>dotenv: config() Loads .env
     Main->>Commander: Instantiates Command()
     Main->>Commander: Defines version, description, global options (--memory-file, --model, --prompts-config)
-    Main->>Commander: Defines 'analyze' subcommand with options (-q, -i)
+    Main->>Commander: Defines 'analyze' subcommand with options (optional -q, required -i)
     Main->>Commander: Defines 'ask' subcommand with arguments (<input...>)
     Main->>Commander: parseOptions(process.argv) // Parses global options first
     Commander-->>Main: Returns global options (memoryFile, model, promptsConfigPath)
@@ -67,7 +67,7 @@ sequenceDiagram
 ## Detailed Step-by-Step Description
 
 1.  **Execution Start:**
-    *   The user executes the compiled JavaScript entry point from the terminal, providing a command (`analyze` or `ask`) and its specific options/arguments, along with optional global options (e.g., `node dist/main.js analyze -q "Refactor this?" --inputs ./src --model gpt-4 --prompts-config ./my_prompts.json`).
+    *   The user executes the compiled JavaScript entry point from the terminal, providing a command (`analyze` or `ask`) and its specific options/arguments, along with optional global options (e.g., `node dist/main.js analyze -q "Refactor this?" --inputs ./src --model gpt-4 --prompts-config ./my_prompts.json` or `node dist/main.js analyze --inputs ./src --model gpt-4` for default analysis).
     *   Relevant Code: Execution in Terminal.
 
 2.  **Initialization (`src/main.ts`):**
@@ -78,7 +78,7 @@ sequenceDiagram
 3.  **Command and Option Definition (`src/main.ts`):**
     *   An instance of `Command` from the `commander` library is created.
     *   Global metadata (version, description) and global options (`--memory-file`, `--model`, `--prompts-config`) are defined.
-    *   The `analyze` subcommand is defined with its required options (`--query`, `--inputs`).
+    *   The `analyze` subcommand is defined with its required option (`--inputs`) and optional option (`--query`).
     *   The `ask` subcommand is defined with its required variadic argument (`<input...>`).
     *   Relevant Code: [`main.ts L19-L27`](../src/main.ts#L19-L27) (adjust line numbers)
 

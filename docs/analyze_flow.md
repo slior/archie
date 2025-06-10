@@ -4,7 +4,7 @@ This document details the execution flow of the `analyze` command, focusing on h
 
 ## Overview
 
-The `analyze` command allows users to initiate an analysis task by providing an initial query (`--query`) and an input directory path (`--inputs`). Optionally, a `--prompts-config <path>` can be provided to customize agent prompts. The command execution is wrapped in a `withMemoryManagement` function that handles loading and saving memory state. The `analyze.ts` command module sets the `inputDirectoryPath` in the initial `AppState`. The agent graph, specifically the `documentRetrievalNode`, then reads relevant files (`.txt`, `.md`) from this path and stores their content in `AppState.inputs`. Next, the `graphExtractionNode` processes these documents to extract entities and relationships using LangChain's `LLMGraphTransformer`, updating the system's knowledge graph. Subsequently, the graph enters a conversational loop where an AI agent (starting with `analysisPrepareNode`, which now reads from `AppState.inputs` and has access to the enriched knowledge graph) interacts with the user via the console, asking clarifying questions until the user approves a proposed solution or indicates they are done. This flow runs directly from the command line after being invoked via `src/main.ts`.
+The `analyze` command allows users to initiate an analysis task by providing an input directory path (`--inputs`) and optionally an initial query (`--query`). If no query is provided, the system uses a default comprehensive analysis query. Optionally, a `--prompts-config <path>` can be provided to customize agent prompts. The command execution is wrapped in a `withMemoryManagement` function that handles loading and saving memory state. The `analyze.ts` command module sets the `inputDirectoryPath` in the initial `AppState`. The agent graph, specifically the `documentRetrievalNode`, then reads relevant files (`.txt`, `.md`) from this path and stores their content in `AppState.inputs`. Next, the `graphExtractionNode` processes these documents to extract entities and relationships using LangChain's `LLMGraphTransformer`, updating the system's knowledge graph. Subsequently, the graph enters a conversational loop where an AI agent (starting with `analysisPrepareNode`, which now reads from `AppState.inputs` and has access to the enriched knowledge graph) interacts with the user via the console, asking clarifying questions until the user approves a proposed solution or indicates they are done. This flow runs directly from the command line after being invoked via `src/main.ts`.
 
 This flow leverages LangGraph's state management, checkpointers, and interrupt mechanism, combined with a node structure including `documentRetrievalNode`, `graphExtractionNode`, `AnalysisPrepareNode`, and `AnalysisInterruptNode`. The actual LLM interactions happen within both `graphExtractionNode` (for knowledge extraction) and `AnalysisPrepareNode` (for conversational analysis). The `AnalysisPrepareNode` uses an injected `PromptService` (passed via `config.configurable` using the `createConfigWithPromptService` utility from `runGraph` in `analyze.ts`) to get formatted prompt strings and uses `AppState.inputs` for file-related context. The `PromptService` handles loading default prompts or custom prompts specified in the user-provided configuration file. The `callLLM` function within `AnalysisPrepareNode` then uses this formatted prompt when calling `callTheLLM` from `src/agents/LLMUtils.ts`.
 
@@ -25,7 +25,7 @@ sequenceDiagram
     participant AnalysisInterruptNode as InterruptNode
     participant Checkpointer
 
-    User->>Terminal: node dist/main.js analyze --query "..." --inputs <dir_path> [--prompts-config <cfg_path>]
+    User->>Terminal: node dist/main.js analyze [--query "..."] --inputs <dir_path> [--prompts-config <cfg_path>]
     Terminal->>Main: Executes main(), parses args via Commander
     Main->>PromptService: new PromptService(promptsConfigPath)
     Main->>withMemoryMgmt: withMemoryManagement(memoryService, memoryFilePath, commandHandler)
@@ -106,7 +106,7 @@ sequenceDiagram
 ## Detailed Step-by-Step Description
 
 1.  **User Invocation (`src/main.ts`):**
-    *   The user runs the application from the terminal, specifying the `analyze` command and its arguments (e.g., `node dist/main.js analyze --query "Implement feature X" --inputs ./docs/feature_x`). They may optionally include `--prompts-config <path_to_config.json>`.
+    *   The user runs the application from the terminal, specifying the `analyze` command and its arguments (e.g., `node dist/main.js analyze --query "Implement feature X" --inputs ./docs/feature_x` or `node dist/main.js analyze --inputs ./docs/feature_x` for default analysis). They may optionally include `--prompts-config <path_to_config.json>`.
     *   `main.ts`, using `commander`, parses the arguments and identifies the `analyze` command and global options.
     *   A global `PromptService` is instantiated, passing the `promptsConfigPath` (if provided). Local overrides can create a different `PromptService` instance if needed.
     *   The `action` handler for the `analyze` command in `main.ts` calls `withMemoryManagement` with a command handler that executes `runAnalysis(query, inputsDir, modelName, memoryService, promptService)` from `src/commands/analyze.ts`.

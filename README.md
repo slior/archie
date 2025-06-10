@@ -75,8 +75,11 @@ node dist/main.js --memory-file /path/to/memory.json --model gpt-4-turbo analyze
 Alternatively, use `ts-node` via npm scripts for development (compiles and runs on the fly):
 
 ```bash
-# Analyze command using ts-node
+# Analyze command using ts-node with specific query
 npm run start -- analyze --query "Summarize these requirements" --inputs ./docs/requirements
+
+# Analyze command using ts-node with default analysis
+npm run start -- analyze --inputs ./docs/requirements
 
 # Ask command using ts-node
 npm run start -- ask "Explain the purpose of the MemoryService"
@@ -95,14 +98,17 @@ Archie provides two main commands:
 
 ### `analyze`
 
-Initiates a potentially multi-turn analysis conversation. You provide an initial query and a directory containing context files (`.txt`, `.md`). The agent will read the files and may ask clarifying questions before providing a final analysis.
+Initiates a potentially multi-turn analysis conversation. You provide a directory containing context files (`.txt`, `.md`) and optionally an initial query. If no query is provided, the system uses a default comprehensive analysis. The agent will read the files and may ask clarifying questions before providing a final analysis.
 
 ```bash
 # Example: Analyze code in ./src for potential refactoring
 node dist/main.js analyze --query "Identify areas for refactoring in this code" --inputs ./src
 
-# Example: Analyze design documents
+# Example: Analyze design documents with specific query
 node dist/main.js analyze -q "Summarize the key decisions in these design docs" -i ./docs/design
+
+# Example: Analyze with default comprehensive analysis (no query needed)
+node dist/main.js analyze --inputs ./docs/design
 ```
 
 The analysis result is typically saved to `analysis_result.md` within the specified inputs directory.
@@ -188,6 +194,8 @@ To use custom prompts, you provide a JSON configuration file via the `--prompts-
 
 ```bash
 node dist/main.js --prompts-config ./my_prompts_config.json analyze --query "..." --inputs ./src
+# or with default analysis
+node dist/main.js --prompts-config ./my_prompts_config.json analyze --inputs ./src
 # or using ts-node
 npm run start -- --prompts-config ./my_prompts_config.json ask "..."
 ```

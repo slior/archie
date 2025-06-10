@@ -58,8 +58,8 @@ export async function runAnalysis(
     displayFinalOutputFn: DisplayFinalOutputFn = displayFinalOutputToUser,
     persistFinalOutputFn: PersistFinalOutputFn = persistFinalOutput
 ): Promise<Partial<AppState>> {
-    if (!query || !inputsDir) {
-        say("Error: Analysis requires a query (--query) and a working directory (--inputs).");
+    if (!inputsDir) {
+        say("Error: Analysis requires a working directory (--inputs).");
         return {};
     }
 

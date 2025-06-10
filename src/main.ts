@@ -8,7 +8,7 @@ import { runAnalysis } from './commands/analyze';
 import { runAsk } from './commands/ask';
 import { runBuildContext } from './commands/buildContext';
 import { PromptService } from './services/PromptService';
-import { DEFAULT_CONTEXT_FILE_PATH } from './config';
+import { DEFAULT_CONTEXT_FILE_PATH, DEFAULT_ANALYSIS_QUERY } from './config';
 
 // Error codes
 const GENERAL_ERROR = 1;
@@ -106,7 +106,7 @@ async function main() {
   program
     .command('analyze')
     .description('Run analysis on a given query and input files')
-    .requiredOption('-q, --query <query>', 'The analysis query')
+    .option('-q, --query <query>', 'The analysis query (optional - uses default comprehensive analysis if not provided)')
     .requiredOption('-i, --inputs <directory>', 'Input directory for analysis context')
     // Allow local override of global model and prompts config
     .option('-m, --model <model_name>', 'Specify the AI model to use for this analysis')
@@ -117,11 +117,18 @@ async function main() {
       const effectivePromptsConfig = options.promptsConfig || globalOpts.promptsConfig;
       const localPromptService = effectivePromptsConfig ? new PromptService(effectivePromptsConfig) : promptService;
 
+      // Use default query if none provided
+      const effectiveQuery = options.query || DEFAULT_ANALYSIS_QUERY;
+      if (!options.query) {
+        say("No query provided, using default comprehensive analysis...");
+        dbg(`Using default query: "${DEFAULT_ANALYSIS_QUERY}"`);
+      }
+
       try {
-        dbg(`Running analysis with query: "${options.query}"`);
+        dbg(`Running analysis with query: "${effectiveQuery}"`);
         dbg(`Input directory: ${options.inputs}`);
         await withMemoryManagement(memoryService, memoryFilePath, async () => {
-          return await runAnalysis(options.query, options.inputs, effectiveModel, memoryService, localPromptService);
+          return await runAnalysis(effectiveQuery, options.inputs, effectiveModel, memoryService, localPromptService);
         });
         dbg("Analysis command finished successfully.");
       } catch (error) {

@@ -35,6 +35,59 @@ describe('Analyze Command (src/commands/analyze.ts)', () => {
 
   describe('runAnalysis', () => {
 
+    it('should accept empty query and proceed with validation only checking inputsDir', async () => {
+      const emptyQuery = '';
+      const inputsDir = './test-inputs';
+      const modelName = 'test-model';
+      const promptService = new PromptService();
+
+      // Mock the dependencies 
+      const mockNewGraphConfig = sinon.stub().returns({ configurable: { thread_id: 'test-thread' } });
+      const mockAnalysisIteration = sinon.stub().resolves({ isDone: true, newInput: {} });
+      const mockGetState = sinon.stub().resolves({ values: { analysisOutput: 'test output' } });
+      const mockGetFinalOutput = sinon.stub().resolves('test final output');
+      const mockDisplayFinalOutput = sinon.stub();
+      const mockPersistFinalOutput = sinon.stub().resolves();
+
+      const result = await analyzeCmd.runAnalysis(
+        emptyQuery,
+        inputsDir,
+        modelName,
+        mockMemoryServiceInstance,
+        promptService,
+        mockNewGraphConfig,
+        mockAnalysisIteration,
+        mockGetState,
+        mockGetFinalOutput,
+        mockDisplayFinalOutput,
+        mockPersistFinalOutput
+      );
+
+      // Should not fail validation since query is no longer required
+      expect(mockNewGraphConfig.calledOnce).to.be.true;
+      expect(mockAnalysisIteration.calledOnce).to.be.true;
+      expect(result).to.be.an('object');
+    });
+
+    it('should fail validation when inputsDir is empty', async () => {
+      const query = 'test query';
+      const emptyInputsDir = '';
+      const modelName = 'test-model';
+      const promptService = new PromptService();
+
+      const result = await analyzeCmd.runAnalysis(
+        query,
+        emptyInputsDir,
+        modelName,
+        mockMemoryServiceInstance,
+        promptService
+      );
+
+      // Should fail validation and return empty object
+      expect(result).to.deep.equal({});
+      expect((utils.say as sinon.SinonStub).calledWithMatch('Analysis requires a working directory')).to.be.true;
+    });
+
     // Helper function to create an async generator for mocking streams
   async function* mockStreamHelper(chunks: any[]) {
     for (const chunk of chunks) {
