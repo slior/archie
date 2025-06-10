@@ -1,5 +1,6 @@
-Continue the analysis based on the latest user message in the history. 
+Continue the analysis based on the latest user message in the history:
+{{conversationHistory}}. 
 ------------------
-Files provided: [{{fileList}}].
+Files provided: [{{fileSummaries}}].
 ------------------
 Ask further clarifying questions or provide analysis as appropriate. 

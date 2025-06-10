@@ -239,7 +239,7 @@ async function callLLMForNextStep(
         
         // Process the LLM response (log warnings and update memory service)
         const updatedMemoryService = processLLMResponse(parsedResponse, memoryService);
-        dbg(`Updated Memory Service: ${updatedMemoryService.getContextAsString()}`);
+        // dbg(`Updated Memory Service: ${updatedMemoryService.getContextAsString()}`);
         
         // Use the parsed agent response (or fallback to raw response if parsing failed)
         const agentResponseText = parsedResponse.agentResponse || rawLLMResponse;
